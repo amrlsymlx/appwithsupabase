@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Button, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { clearAuthSession, getAuthSession } from "../lib/storage";
 import { ThemeToggle, useTheme } from "../lib/theme";
 
@@ -48,9 +48,15 @@ export default function Dashboard() {
       <Text style={[styles.message, { color: theme.secondaryText }]}>
         You are signed in.
       </Text>
-      <View style={styles.button}>
-        <Button title="Sign Out" onPress={handleSignOut} />
-      </View>
+      <Pressable
+        style={({ pressed }) => [
+          styles.primaryButton,
+          pressed && styles.primaryButtonPressed,
+        ]}
+        onPress={handleSignOut}
+      >
+        <Text style={styles.primaryButtonText}>Sign Out</Text>
+      </Pressable>
     </View>
   );
 }
@@ -73,7 +79,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 24,
   },
-  button: {
+  primaryButton: {
     marginTop: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: "#2563eb",
+  },
+  primaryButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  primaryButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });

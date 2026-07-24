@@ -219,7 +219,22 @@ export default function SignUp() {
             { backgroundColor: theme.background, paddingTop: 80 },
           ]}
         >
-          <View style={[styles.formCard, { backgroundColor: theme.name === "dark" ? "rgba(31, 41, 55, 0.72)" : "rgba(255, 255, 255, 0.72)" }]}>
+          <View
+            style={[
+              styles.formCard,
+              {
+                backgroundColor:
+                  theme.name === "dark"
+                    ? "rgba(31, 41, 55, 0.72)"
+                    : "rgba(255, 255, 255, 0.95)",
+                borderWidth: Platform.OS === "android" ? 0 : 1,
+                borderColor:
+                  Platform.OS === "android"
+                    ? "transparent"
+                    : "rgba(255, 255, 255, 0.25)",
+              },
+            ]}
+          >
             <View style={styles.heroWrap}>
               <Text style={[styles.title, { color: theme.text }]}>Create account</Text>
               <Text style={[styles.subtitle, { color: theme.secondaryText }]}>Join us and get started</Text>
@@ -581,8 +596,6 @@ const styles = StyleSheet.create({
   formCard: {
     borderRadius: 20,
     padding: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.25)",
     shadowColor: "#000",
     shadowOpacity: 0.16,
     shadowRadius: 16,
