@@ -7,9 +7,12 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          presentation: "transparentModal",
+          presentation: "card",
         }}
-      />
+      >
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="sign-up" options={{ headerShown: false }} />
+      </Stack>
     </ThemeProvider>
   );
 }

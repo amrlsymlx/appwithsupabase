@@ -4,7 +4,10 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   Button,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -139,7 +142,7 @@ export default function Index() {
         <Text style={[styles.message, { color: theme.secondaryText }]}>
           You are signed in.
         </Text>
-        <View style={styles.button}>
+        <View style={styles.primaryButton}>
           <Button title="Sign Out" onPress={handleSignOut} />
         </View>
       </View>
@@ -147,135 +150,189 @@ export default function Index() {
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: theme.background, paddingTop: 80 },
-      ]}
+    <KeyboardAvoidingView
+      style={[styles.keyboardView, { backgroundColor: theme.background }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
     >
-      <ThemeToggle />
-      <Text style={[styles.title, { color: theme.text }]}>Sign in</Text>
-
-      {!SUPABASE_CONFIGURED ? (
-        <View style={styles.banner}>
-          <Text style={[styles.bannerText, { color: theme.bannerText }]}>
-            Supabase is not configured. Add `SUPABASE_URL` and
-            `SUPABASE_ANON_KEY` to app.json and restart the app.
-          </Text>
-        </View>
-      ) : null}
-
-      <TextInput
-        style={[
-          styles.input,
-          {
-            backgroundColor: theme.name === "dark" ? "#1f2937" : "#ffffff",
-            borderColor: theme.name === "dark" ? "#4b5563" : "#d1d5db",
-            color: theme.name === "dark" ? "#f9fafb" : "#111827",
-          },
-        ]}
-        placeholderTextColor={theme.name === "dark" ? "#cbd5e1" : "#6b7280"}
-        placeholder="Email"
-        value={email}
-        onChangeText={(t) => {
-          setEmail(t);
-          if (error) setError("");
-        }}
-        onBlur={() => setEmailTouched(true)}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      {emailError ? (
-        <Text style={styles.fieldError}>
-          {email ? "Enter a valid email address" : "Email is required"}
-        </Text>
-      ) : null}
-
-      <View style={styles.passwordRow}>
-        <TextInput
+      <ScrollView
+        style={[styles.scrollView, { backgroundColor: theme.background }]}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View
           style={[
-            styles.input,
-            {
-              flex: 1,
-              marginRight: 8,
-              marginBottom: 0,
-              backgroundColor: theme.name === "dark" ? "#1f2937" : "#ffffff",
-              borderColor: theme.name === "dark" ? "#4b5563" : "#d1d5db",
-              color: theme.name === "dark" ? "#f9fafb" : "#111827",
-            },
+            styles.container,
+            { backgroundColor: theme.background, paddingTop: 80 },
           ]}
-          placeholderTextColor={theme.name === "dark" ? "#cbd5e1" : "#6b7280"}
-          placeholder="Password"
-          value={password}
-          onChangeText={(t) => {
-            setPassword(t);
-            if (error) setError("");
-          }}
-          onBlur={() => setPasswordTouched(true)}
-          secureTextEntry={!showPassword}
-        />
-        <Pressable
-          onPress={() => setShowPassword((s) => !s)}
-          accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-          style={({ pressed }) => [{ padding: 6, opacity: pressed ? 0.6 : 1 }]}
         >
-          <MaterialCommunityIcons
-            name={showPassword ? "eye-off" : "eye"}
-            size={22}
-            color={theme.text}
-          />
-        </Pressable>
-      </View>
+          <ThemeToggle />
+          <View style={[styles.formCard, { backgroundColor: theme.name === "dark" ? "rgba(31, 41, 55, 0.72)" : "rgba(255, 255, 255, 0.72)" }]}>
+            <View style={styles.heroWrap}>
+              <Text style={[styles.title, { color: theme.text }]}>Welcome back</Text>
+              <Text style={[styles.subtitle, { color: theme.secondaryText }]}>Sign in to continue</Text>
+            </View>
 
-      {passwordError ? (
-        <Text style={styles.fieldError}>
-          {password
-            ? "Password must be at least 6 characters"
-            : "Password is required"}
-        </Text>
-      ) : null}
+            {!SUPABASE_CONFIGURED ? (
+              <View style={styles.banner}>
+                <Text style={[styles.bannerText, { color: theme.bannerText }]}> 
+                  Supabase is not configured. Add `SUPABASE_URL` and
+                  `SUPABASE_ANON_KEY` to app.json and restart the app.
+                </Text>
+              </View>
+            ) : null}
 
-      {error ? (
-        <Text style={[styles.error, { color: theme.error }]}>{error}</Text>
-      ) : null}
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.name === "dark" ? "rgba(17, 24, 39, 0.85)" : "rgba(255, 255, 255, 0.95)",
+                  borderColor: theme.name === "dark" ? "rgba(255, 255, 255, 0.14)" : "rgba(15, 23, 42, 0.1)",
+                  color: theme.name === "dark" ? "#f9fafb" : "#111827",
+                },
+              ]}
+              placeholderTextColor={theme.name === "dark" ? "#cbd5e1" : "#6b7280"}
+              placeholder="Email"
+              value={email}
+              onChangeText={(t) => {
+                setEmail(t);
+                if (error) setError("");
+              }}
+              onBlur={() => setEmailTouched(true)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            {emailError ? (
+              <Text style={styles.fieldError}>
+                {email ? "Enter a valid email address" : "Email is required"}
+              </Text>
+            ) : null}
 
-      <View style={styles.button}>
-        <Button
-          title={loading ? "Signing in..." : "Sign In"}
-          onPress={handleLogin}
-          disabled={loading || !formValid || !SUPABASE_CONFIGURED}
-        />
-      </View>
-      <View style={styles.signUpContainer}>
-        <Text style={[styles.signUpText, { color: theme.text }]}>
-          Don't have an account yet?{" "}
-        </Text>
-        <Pressable onPress={() => router.push("/sign-up")}>
-          <Text style={styles.signUpLink}>Sign Up</Text>
-        </Pressable>
-      </View>
-    </View>
+            <View style={styles.passwordRow}>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    flex: 1,
+                    marginRight: 8,
+                    marginBottom: 0,
+                    backgroundColor: theme.name === "dark" ? "rgba(17, 24, 39, 0.85)" : "rgba(255, 255, 255, 0.95)",
+                    borderColor: theme.name === "dark" ? "rgba(255, 255, 255, 0.14)" : "rgba(15, 23, 42, 0.1)",
+                    color: theme.name === "dark" ? "#f9fafb" : "#111827",
+                  },
+                ]}
+                placeholderTextColor={theme.name === "dark" ? "#cbd5e1" : "#6b7280"}
+                placeholder="Password"
+                value={password}
+                onChangeText={(t) => {
+                  setPassword(t);
+                  if (error) setError("");
+                }}
+                onBlur={() => setPasswordTouched(true)}
+                secureTextEntry={!showPassword}
+              />
+              <Pressable
+                onPress={() => setShowPassword((s) => !s)}
+                accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                style={({ pressed }) => [{ padding: 6, opacity: pressed ? 0.6 : 1 }]}
+              >
+                <MaterialCommunityIcons
+                  name={showPassword ? "eye-off" : "eye"}
+                  size={22}
+                  color={theme.text}
+                />
+              </Pressable>
+            </View>
+
+            {passwordError ? (
+              <Text style={styles.fieldError}>
+                {password
+                  ? "Password must be at least 6 characters"
+                  : "Password is required"}
+              </Text>
+            ) : null}
+
+            {error ? (
+              <Text style={[styles.error, { color: theme.error }]}>{error}</Text>
+            ) : null}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryButton,
+                (loading || !formValid || !SUPABASE_CONFIGURED) && styles.primaryButtonDisabled,
+                pressed && styles.primaryButtonPressed,
+              ]}
+              onPress={handleLogin}
+              disabled={loading || !formValid || !SUPABASE_CONFIGURED}
+            >
+              <Text style={styles.primaryButtonText}>
+                {loading ? "Signing in..." : "Sign In"}
+              </Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.signUpContainer}>
+            <Text style={[styles.signUpText, { color: theme.text }]}> 
+              Don't have an account yet?{" "}
+            </Text>
+            <Pressable onPress={() => router.push("/sign-up")}>
+              <Text style={styles.signUpLink}>Sign Up</Text>
+            </Pressable>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  keyboardView: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 32,
+  },
+  container: {
+    flexGrow: 1,
     justifyContent: "center",
     padding: 24,
   },
+  heroWrap: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
   title: {
     fontSize: 24,
-    fontWeight: "600",
-    marginBottom: 16,
+    fontWeight: "700",
+    marginBottom: 6,
     textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 14,
+    textAlign: "center",
+  },
+  formCard: {
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.25)",
+    shadowColor: "#000",
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+    backdropFilter: "blur(12px)",
   },
   input: {
     height: 44,
-    borderColor: "#ccc",
     borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 10,
+    borderRadius: 12,
+    paddingHorizontal: 12,
     marginBottom: 12,
   },
   passwordRow: {
@@ -283,8 +340,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  button: {
+  primaryButton: {
     marginTop: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: "#2563eb",
+  },
+  primaryButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  primaryButtonDisabled: {
+    opacity: 0.6,
+  },
+  primaryButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
   },
   error: {
     color: "#c00",
@@ -304,6 +379,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginTop: 16,
+    paddingTop: 8,
   },
   signUpText: {
     fontSize: 14,
