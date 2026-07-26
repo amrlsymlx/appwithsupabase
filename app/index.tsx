@@ -76,7 +76,7 @@ export default function Index() {
       } else {
         Alert.alert(
           "Supabase not configured",
-          "Please set SUPABASE_URL and SUPABASE_ANON_KEY in app.json before signing in.",
+          "Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env before signing in.",
         );
       }
     } catch (err: any) {
@@ -192,8 +192,8 @@ export default function Index() {
             {!SUPABASE_CONFIGURED ? (
               <View style={styles.banner}>
                 <Text style={[styles.bannerText, { color: theme.bannerText }]}> 
-                  Supabase is not configured. Add `SUPABASE_URL` and
-                  `SUPABASE_ANON_KEY` to app.json and restart the app.
+                  Supabase is not configured. Add `EXPO_PUBLIC_SUPABASE_URL` and
+                  `EXPO_PUBLIC_SUPABASE_ANON_KEY` to .env and restart the app.
                 </Text>
               </View>
             ) : null}

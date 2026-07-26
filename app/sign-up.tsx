@@ -189,7 +189,7 @@ export default function SignUp() {
         }
       } else {
         const missingConfigMessage =
-          "Supabase is not configured. Please set SUPABASE_URL and SUPABASE_ANON_KEY in app.json.";
+          "Supabase is not configured. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env.";
         setStatus(missingConfigMessage);
         Alert.alert("Supabase not configured", missingConfigMessage);
       }
@@ -243,8 +243,8 @@ export default function SignUp() {
             {!SUPABASE_CONFIGURED ? (
               <View style={styles.banner}>
                 <Text style={[styles.bannerText, { color: theme.bannerText }]}> 
-                  Supabase is not configured. Add `SUPABASE_URL` and
-                  `SUPABASE_ANON_KEY` to app.json before registering.
+                  Supabase is not configured. Add `EXPO_PUBLIC_SUPABASE_URL` and
+                  `EXPO_PUBLIC_SUPABASE_ANON_KEY` to .env before registering.
                 </Text>
               </View>
             ) : null}
