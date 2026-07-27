@@ -1,13 +1,14 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, {
-    createContext,
-    useContext,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type ThemeName = "light" | "dark";
 
@@ -102,43 +103,60 @@ export function useTheme() {
 
 export function ThemeToggle() {
   const { themeName, toggleTheme } = useTheme();
-  const knobOffset = useRef(
-    new Animated.Value(themeName === "dark" ? 12 : 0),
-  ).current;
+  const insets = useSafeAreaInsets();
+  const isDark = themeName === "dark";
+  const knobOffset = useRef(new Animated.Value(isDark ? 18 : 0)).current;
 
   useEffect(() => {
     Animated.timing(knobOffset, {
-      toValue: themeName === "dark" ? 12 : 0,
+      toValue: isDark ? 18 : 0,
       duration: 180,
       useNativeDriver: false,
     }).start();
-  }, [knobOffset, themeName]);
+  }, [isDark, knobOffset]);
 
-  const trackColor = themeName === "dark" ? "#60a5fa" : "#d1d5db";
-  const thumbColor = themeName === "dark" ? "#f9fafb" : "#ffffff";
+  const trackColor = isDark ? "#1f2937" : "#f5f7fb";
+  const thumbColor = isDark ? "#f9fafb" : "#ffffff";
+  const sunColor = isDark ? "#9ca3af" : "#f59e0b";
+  const moonColor = isDark ? "#fbbf24" : "#4b5563";
 
   return (
     <Pressable
       onPress={toggleTheme}
-      style={styles.switchContainer}
+      style={[styles.switchContainer, { top: Math.max(12, insets.top + 8) }]}
       accessibilityRole="switch"
-      accessibilityState={{ checked: themeName === "dark" }}
+      accessibilityState={{ checked: isDark }}
     >
       <View style={styles.labelRow}>
-        <MaterialCommunityIcons
-          name="weather-sunny"
-          size={14}
-          color={themeName === "light" ? "#2563eb" : "#6b7280"}
-        />
         <Animated.View
           style={[
             styles.track,
             {
               backgroundColor: trackColor,
-              borderColor: themeName === "dark" ? "#60a5fa" : "#9ca3af",
+              borderColor: isDark ? "#60a5fa" : "#9ca3af",
             },
           ]}
         >
+          <MaterialCommunityIcons
+            name="weather-sunny"
+            size={12}
+            color={sunColor}
+            style={[
+              styles.trackIcon,
+              styles.sunIcon,
+              { opacity: isDark ? 0 : 1 },
+            ]}
+          />
+          <MaterialCommunityIcons
+            name="weather-night"
+            size={12}
+            color={moonColor}
+            style={[
+              styles.trackIcon,
+              styles.moonIcon,
+              { opacity: isDark ? 1 : 0 },
+            ]}
+          />
           <Animated.View
             style={[
               styles.thumb,
@@ -149,11 +167,6 @@ export function ThemeToggle() {
             ]}
           />
         </Animated.View>
-        <MaterialCommunityIcons
-          name="weather-night"
-          size={14}
-          color={themeName === "dark" ? "#2563eb" : "#6b7280"}
-        />
       </View>
     </Pressable>
   );
@@ -162,9 +175,8 @@ export function ThemeToggle() {
 const styles = StyleSheet.create({
   switchContainer: {
     position: "absolute",
-    top: 56,
-    right: 16,
-    zIndex: 10,
+    right: 20,
+    zIndex: 30,
   },
   labelRow: {
     flexDirection: "row",
@@ -182,17 +194,32 @@ const styles = StyleSheet.create({
     color: "#6b7280",
   },
   track: {
-    width: 28,
-    height: 16,
+    width: 40,
+    height: 20,
     borderRadius: 999,
     borderWidth: 1,
-    padding: 1,
+    paddingHorizontal: 4,
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  trackIcon: {
+    position: "absolute",
+    top: 4,
+    zIndex: 2,
+  },
+  sunIcon: {
+    left: 4,
+  },
+  moonIcon: {
+    right: 4,
   },
   thumb: {
-    width: 12,
-    height: 12,
+    width: 14,
+    height: 14,
     borderRadius: 999,
+    position: "absolute",
+    left: 3,
+    zIndex: 1,
     shadowColor: "#000",
     shadowOpacity: 0.15,
     shadowRadius: 2,

@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
-import { ThemeToggle, useTheme } from "../lib/theme";
+import { useTheme } from "../lib/theme";
 
 type CaptchaChallenge = {
   text: string;
@@ -202,13 +202,12 @@ export default function SignUp() {
 
   return (
     <KeyboardAvoidingView
-    style={[styles.keyboardView, { backgroundColor: theme.background }]}
+      style={[styles.keyboardView, { backgroundColor: theme.background }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-    keyboardVerticalOffset={0}
+      keyboardVerticalOffset={0}
     >
-      <ThemeToggle />
       <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
+        style={[styles.scrollView, { backgroundColor: theme.background }]}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -236,13 +235,17 @@ export default function SignUp() {
             ]}
           >
             <View style={styles.heroWrap}>
-              <Text style={[styles.title, { color: theme.text }]}>Create account</Text>
-              <Text style={[styles.subtitle, { color: theme.secondaryText }]}>Join us and get started</Text>
+              <Text style={[styles.title, { color: theme.text }]}>
+                Create account
+              </Text>
+              <Text style={[styles.subtitle, { color: theme.secondaryText }]}>
+                Join us and get started
+              </Text>
             </View>
 
             {!SUPABASE_CONFIGURED ? (
               <View style={styles.banner}>
-                <Text style={[styles.bannerText, { color: theme.bannerText }]}> 
+                <Text style={[styles.bannerText, { color: theme.bannerText }]}>
                   Supabase is not configured. Add `EXPO_PUBLIC_SUPABASE_URL` and
                   `EXPO_PUBLIC_SUPABASE_ANON_KEY` to .env before registering.
                 </Text>
@@ -259,12 +262,20 @@ export default function SignUp() {
               style={[
                 styles.input,
                 {
-                  backgroundColor: theme.name === "dark" ? "rgba(17, 24, 39, 0.85)" : "rgba(255, 255, 255, 0.95)",
-                  borderColor: theme.name === "dark" ? "rgba(255, 255, 255, 0.14)" : "rgba(15, 23, 42, 0.1)",
+                  backgroundColor:
+                    theme.name === "dark"
+                      ? "rgba(17, 24, 39, 0.85)"
+                      : "rgba(255, 255, 255, 0.95)",
+                  borderColor:
+                    theme.name === "dark"
+                      ? "rgba(255, 255, 255, 0.14)"
+                      : "rgba(15, 23, 42, 0.1)",
                   color: theme.name === "dark" ? "#f9fafb" : "#111827",
                 },
               ]}
-              placeholderTextColor={theme.name === "dark" ? "#cbd5e1" : "#6b7280"}
+              placeholderTextColor={
+                theme.name === "dark" ? "#cbd5e1" : "#6b7280"
+              }
               placeholder="Full name"
               value={name}
               onChangeText={setName}
@@ -275,12 +286,20 @@ export default function SignUp() {
               style={[
                 styles.input,
                 {
-                  backgroundColor: theme.name === "dark" ? "rgba(17, 24, 39, 0.85)" : "rgba(255, 255, 255, 0.95)",
-                  borderColor: theme.name === "dark" ? "rgba(255, 255, 255, 0.14)" : "rgba(15, 23, 42, 0.1)",
+                  backgroundColor:
+                    theme.name === "dark"
+                      ? "rgba(17, 24, 39, 0.85)"
+                      : "rgba(255, 255, 255, 0.95)",
+                  borderColor:
+                    theme.name === "dark"
+                      ? "rgba(255, 255, 255, 0.14)"
+                      : "rgba(15, 23, 42, 0.1)",
                   color: theme.name === "dark" ? "#f9fafb" : "#111827",
                 },
               ]}
-              placeholderTextColor={theme.name === "dark" ? "#cbd5e1" : "#6b7280"}
+              placeholderTextColor={
+                theme.name === "dark" ? "#cbd5e1" : "#6b7280"
+              }
               placeholder="Email"
               value={email}
               onChangeText={setEmail}
@@ -301,12 +320,20 @@ export default function SignUp() {
                     flex: 1,
                     marginRight: 8,
                     marginBottom: 0,
-                    backgroundColor: theme.name === "dark" ? "rgba(17, 24, 39, 0.85)" : "rgba(255, 255, 255, 0.95)",
-                    borderColor: theme.name === "dark" ? "rgba(255, 255, 255, 0.14)" : "rgba(15, 23, 42, 0.1)",
+                    backgroundColor:
+                      theme.name === "dark"
+                        ? "rgba(17, 24, 39, 0.85)"
+                        : "rgba(255, 255, 255, 0.95)",
+                    borderColor:
+                      theme.name === "dark"
+                        ? "rgba(255, 255, 255, 0.14)"
+                        : "rgba(15, 23, 42, 0.1)",
                     color: theme.name === "dark" ? "#f9fafb" : "#111827",
                   },
                 ]}
-                placeholderTextColor={theme.name === "dark" ? "#cbd5e1" : "#6b7280"}
+                placeholderTextColor={
+                  theme.name === "dark" ? "#cbd5e1" : "#6b7280"
+                }
                 placeholder="Password"
                 value={password}
                 onChangeText={setPassword}
@@ -314,7 +341,9 @@ export default function SignUp() {
               />
               <Pressable
                 onPress={() => setShowPassword((prev) => !prev)}
-                accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                accessibilityLabel={
+                  showPassword ? "Hide password" : "Show password"
+                }
                 style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
               >
                 <MaterialCommunityIcons
@@ -324,19 +353,6 @@ export default function SignUp() {
                 />
               </Pressable>
             </View>
-            {password.length > 0 ? (
-              <View style={styles.passwordHintBox}>
-                <Text style={styles.passwordHintTitle}>Password must include:</Text>
-                <Text style={styles.passwordHintItem}>• At least 6 characters</Text>
-                <Text style={styles.passwordHintItem}>• Uppercase letters</Text>
-                <Text style={styles.passwordHintItem}>• Lowercase letters</Text>
-                <Text style={styles.passwordHintItem}>• Numbers</Text>
-                <Text style={styles.passwordHintItem}>
-                  • Special characters: ! @ # $ % ^ & * ( ) - _ = + { } [ ] : ; , . ? /
-                </Text>
-              </View>
-            ) : null}
-
             <View style={styles.passwordRow}>
               <TextInput
                 style={[
@@ -345,12 +361,20 @@ export default function SignUp() {
                     flex: 1,
                     marginRight: 8,
                     marginBottom: 0,
-                    backgroundColor: theme.name === "dark" ? "rgba(17, 24, 39, 0.85)" : "rgba(255, 255, 255, 0.95)",
-                    borderColor: theme.name === "dark" ? "rgba(255, 255, 255, 0.14)" : "rgba(15, 23, 42, 0.1)",
+                    backgroundColor:
+                      theme.name === "dark"
+                        ? "rgba(17, 24, 39, 0.85)"
+                        : "rgba(255, 255, 255, 0.95)",
+                    borderColor:
+                      theme.name === "dark"
+                        ? "rgba(255, 255, 255, 0.14)"
+                        : "rgba(15, 23, 42, 0.1)",
                     color: theme.name === "dark" ? "#f9fafb" : "#111827",
                   },
                 ]}
-                placeholderTextColor={theme.name === "dark" ? "#cbd5e1" : "#6b7280"}
+                placeholderTextColor={
+                  theme.name === "dark" ? "#cbd5e1" : "#6b7280"
+                }
                 placeholder="Confirm password"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
@@ -385,9 +409,14 @@ export default function SignUp() {
                   accessibilityState={{ checked: agreeToTerms }}
                 >
                   <View
-                    style={[styles.checkbox, agreeToTerms && styles.checkboxChecked]}
+                    style={[
+                      styles.checkbox,
+                      agreeToTerms && styles.checkboxChecked,
+                    ]}
                   >
-                    {agreeToTerms ? <Text style={styles.checkboxMark}>✓</Text> : null}
+                    {agreeToTerms ? (
+                      <Text style={styles.checkboxMark}>✓</Text>
+                    ) : null}
                   </View>
                 </Pressable>
                 <Text style={[styles.checkboxLabel, { color: theme.text }]}>
@@ -401,7 +430,9 @@ export default function SignUp() {
 
             <View style={styles.captchaBox}>
               <View style={styles.captchaPromptRow}>
-                <Text style={[styles.captchaLabel, { color: theme.secondaryText }]}>
+                <Text
+                  style={[styles.captchaLabel, { color: theme.secondaryText }]}
+                >
                   Security check
                 </Text>
                 <Pressable
@@ -425,12 +456,17 @@ export default function SignUp() {
                     }
 
                     const top = 16 + Math.floor(Math.random() * 24);
-                    const left = 12 + index * 34 + Math.floor(Math.random() * 6) - 3;
+                    const left =
+                      12 + index * 34 + Math.floor(Math.random() * 6) - 3;
                     const rotation = Math.floor(Math.random() * 30) - 15;
                     const fontSize = 26 + Math.floor(Math.random() * 8);
-                    const color = ["#1f2937", "#2563eb", "#dc2626", "#7c3aed", "#0f766e"][
-                      Math.floor(Math.random() * 5)
-                    ];
+                    const color = [
+                      "#1f2937",
+                      "#2563eb",
+                      "#dc2626",
+                      "#7c3aed",
+                      "#0f766e",
+                    ][Math.floor(Math.random() * 5)];
 
                     return (
                       <Text
@@ -478,23 +514,35 @@ export default function SignUp() {
                   styles.input,
                   {
                     marginBottom: 0,
-                    backgroundColor: theme.name === "dark" ? "rgba(17, 24, 39, 0.85)" : "rgba(255, 255, 255, 0.95)",
-                    borderColor: theme.name === "dark" ? "rgba(255, 255, 255, 0.14)" : "rgba(15, 23, 42, 0.1)",
+                    backgroundColor:
+                      theme.name === "dark"
+                        ? "rgba(17, 24, 39, 0.85)"
+                        : "rgba(255, 255, 255, 0.95)",
+                    borderColor:
+                      theme.name === "dark"
+                        ? "rgba(255, 255, 255, 0.14)"
+                        : "rgba(15, 23, 42, 0.1)",
                     color: theme.name === "dark" ? "#f9fafb" : "#111827",
                   },
                 ]}
-                placeholderTextColor={theme.name === "dark" ? "#cbd5e1" : "#6b7280"}
+                placeholderTextColor={
+                  theme.name === "dark" ? "#cbd5e1" : "#6b7280"
+                }
                 placeholder="Enter the characters shown"
                 value={captchaInput}
                 onChangeText={(value) => {
-                  setCaptchaInput(value.replace(/[^A-Za-z0-9]/g, "").toUpperCase());
+                  setCaptchaInput(
+                    value.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
+                  );
                   if (captchaError) {
                     setCaptchaError("");
                   }
                 }}
                 autoCapitalize="characters"
               />
-              {captchaError ? <Text style={styles.errorText}>{captchaError}</Text> : null}
+              {captchaError ? (
+                <Text style={styles.errorText}>{captchaError}</Text>
+              ) : null}
             </View>
 
             <Pressable
@@ -510,7 +558,6 @@ export default function SignUp() {
                 {loading ? "Creating..." : "Sign Up"}
               </Text>
             </Pressable>
-
           </View>
 
           <Pressable
@@ -532,10 +579,13 @@ export default function SignUp() {
             <Text style={[styles.modalTitle, { color: theme.text }]}>
               Terms & Conditions
             </Text>
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalBody}
+              showsVerticalScrollIndicator={false}
+            >
               <Text style={[styles.modalText, { color: theme.secondaryText }]}>
-                By creating an account, you agree to use this app responsibly and
-                comply with all applicable laws.
+                By creating an account, you agree to use this app responsibly
+                and comply with all applicable laws.
               </Text>
               <Text style={[styles.modalText, { color: theme.secondaryText }]}>
                 You are responsible for maintaining the confidentiality of your
@@ -543,8 +593,8 @@ export default function SignUp() {
                 account.
               </Text>
               <Text style={[styles.modalText, { color: theme.secondaryText }]}>
-                We may update these terms from time to time. Continued use of the
-                app after updates means you accept the revised terms.
+                We may update these terms from time to time. Continued use of
+                the app after updates means you accept the revised terms.
               </Text>
             </ScrollView>
             <Pressable
@@ -615,25 +665,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  passwordHintBox: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
-    backgroundColor: "#f8fafc",
-  },
-  passwordHintTitle: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  passwordHintItem: {
-    fontSize: 12,
-    color: "#475569",
-    marginBottom: 2,
-  },
   checkboxRow: {
+    marginTop: 4,
     marginBottom: 12,
   },
   checkboxContainer: {
