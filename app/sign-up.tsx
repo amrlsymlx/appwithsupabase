@@ -67,6 +67,13 @@ export default function SignUp() {
       hasSpecialCharacter
     );
   };
+  const passwordChecks = {
+    minLength: password.length >= 6,
+    hasUppercase: /[A-Z]/.test(password),
+    hasLowercase: /[a-z]/.test(password),
+    hasNumber: /[0-9]/.test(password),
+    hasSpecialCharacter: /[!@#$%^&*()\-_+=\[\]{}:;,.?/]/.test(password),
+  };
   const normalizedCaptchaInput = captchaInput.trim().toLowerCase();
   const isCaptchaCorrect =
     normalizedCaptchaInput.length > 0 &&
@@ -353,6 +360,115 @@ export default function SignUp() {
                 />
               </Pressable>
             </View>
+            {password.length > 0 ? (
+              <View style={styles.passwordHintBox}>
+                <Text style={styles.passwordHintTitle}>
+                  Password must include:
+                </Text>
+                <View style={styles.passwordHintItem}>
+                  <MaterialCommunityIcons
+                    name={
+                      passwordChecks.minLength
+                        ? "check-circle"
+                        : "circle-outline"
+                    }
+                    size={14}
+                    color={passwordChecks.minLength ? "#16a34a" : "#64748b"}
+                  />
+                  <Text
+                    style={[
+                      styles.passwordHintText,
+                      passwordChecks.minLength &&
+                        styles.passwordHintTextSuccess,
+                    ]}
+                  >
+                    At least 6 characters
+                  </Text>
+                </View>
+                <View style={styles.passwordHintItem}>
+                  <MaterialCommunityIcons
+                    name={
+                      passwordChecks.hasUppercase
+                        ? "check-circle"
+                        : "circle-outline"
+                    }
+                    size={14}
+                    color={passwordChecks.hasUppercase ? "#16a34a" : "#64748b"}
+                  />
+                  <Text
+                    style={[
+                      styles.passwordHintText,
+                      passwordChecks.hasUppercase &&
+                        styles.passwordHintTextSuccess,
+                    ]}
+                  >
+                    One uppercase letter
+                  </Text>
+                </View>
+                <View style={styles.passwordHintItem}>
+                  <MaterialCommunityIcons
+                    name={
+                      passwordChecks.hasLowercase
+                        ? "check-circle"
+                        : "circle-outline"
+                    }
+                    size={14}
+                    color={passwordChecks.hasLowercase ? "#16a34a" : "#64748b"}
+                  />
+                  <Text
+                    style={[
+                      styles.passwordHintText,
+                      passwordChecks.hasLowercase &&
+                        styles.passwordHintTextSuccess,
+                    ]}
+                  >
+                    One lowercase letter
+                  </Text>
+                </View>
+                <View style={styles.passwordHintItem}>
+                  <MaterialCommunityIcons
+                    name={
+                      passwordChecks.hasNumber
+                        ? "check-circle"
+                        : "circle-outline"
+                    }
+                    size={14}
+                    color={passwordChecks.hasNumber ? "#16a34a" : "#64748b"}
+                  />
+                  <Text
+                    style={[
+                      styles.passwordHintText,
+                      passwordChecks.hasNumber &&
+                        styles.passwordHintTextSuccess,
+                    ]}
+                  >
+                    One number
+                  </Text>
+                </View>
+                <View style={styles.passwordHintItem}>
+                  <MaterialCommunityIcons
+                    name={
+                      passwordChecks.hasSpecialCharacter
+                        ? "check-circle"
+                        : "circle-outline"
+                    }
+                    size={14}
+                    color={
+                      passwordChecks.hasSpecialCharacter ? "#16a34a" : "#64748b"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.passwordHintText,
+                      passwordChecks.hasSpecialCharacter &&
+                        styles.passwordHintTextSuccess,
+                    ]}
+                  >
+                    One special character
+                  </Text>
+                </View>
+              </View>
+            ) : null}
             <View style={styles.passwordRow}>
               <TextInput
                 style={[
@@ -664,6 +780,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
+  },
+  passwordHintBox: {
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    backgroundColor: "#eff6ff",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: -4,
+    marginBottom: 12,
+  },
+  passwordHintTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#1e3a8a",
+    marginBottom: 4,
+  },
+  passwordHintItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 3,
+  },
+  passwordHintText: {
+    marginLeft: 8,
+    fontSize: 12,
+    color: "#475569",
+  },
+  passwordHintTextSuccess: {
+    color: "#166534",
   },
   checkboxRow: {
     marginTop: 4,
