@@ -40,9 +40,11 @@ export default function CreateTab() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
     padding: 24,
+    paddingTop: 88,
+    position: "relative",
   },
   title: {
     fontSize: 28,

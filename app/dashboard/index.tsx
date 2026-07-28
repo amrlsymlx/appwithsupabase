@@ -27,18 +27,6 @@ export default function DashboardHomeTab() {
     loadSession();
   }, [router]);
 
-  const handleSignOut = async () => {
-    try {
-      await clearAuthSession();
-    } catch (error) {
-      console.warn("Failed to clear auth session", error);
-    } finally {
-      setUserName("");
-      setUserEmail("");
-      router.replace("/");
-    }
-  };
-
   if (!ready) {
     return null;
   }
@@ -57,18 +45,6 @@ export default function DashboardHomeTab() {
         </Text>
       </View>
 
-      <View style={styles.signOutRow}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && styles.primaryButtonPressed,
-          ]}
-          onPress={handleSignOut}
-          hitSlop={10}
-        >
-          <Text style={styles.primaryButtonText}>Sign Out</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }

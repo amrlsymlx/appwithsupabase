@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
 import React, {
   createContext,
   useContext,
@@ -7,7 +8,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Pressable, StyleSheet, View, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type ThemeName = "light" | "dark";
@@ -73,7 +74,23 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [themeName, setThemeName] = useState<ThemeName>("light");
+  const [themeName, setThemeName] = useState<ThemeName>(() => {
+    // On web, attempt to restore from localStorage, otherwise fall back to
+    // system preference. Wrap in try/catch for environments without localStorage.
+    if (typeof window !== "undefined" && Platform.OS === "web") {
+      try {
+        const stored = localStorage.getItem("themeName");
+        if (stored === "dark" || stored === "light") return stored as ThemeName;
+        const prefersDark =
+          window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        return prefersDark ? "dark" : "light";
+      } catch {
+        return "light";
+      }
+    }
+
+    return "light";
+  });
 
   const theme = useMemo(() => themes[themeName], [themeName]);
 
@@ -81,13 +98,31 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeName((current) => (current === "light" ? "dark" : "light"));
   };
 
+  // Persist theme changes on web so refreshes keep the selected theme
+  useEffect(() => {
+    if (typeof window !== "undefined" && Platform.OS === "web") {
+      try {
+        localStorage.setItem("themeName", themeName);
+      } catch {
+        // ignore write errors
+      }
+    }
+  }, [themeName]);
+
   const value = useMemo(
     () => ({ theme, themeName, toggleTheme }),
     [theme, themeName],
   );
 
   return (
-    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+    <ThemeContext.Provider value={value}>
+      <StatusBar
+        animated
+        style={themeName === "dark" ? "light" : "dark"}
+        backgroundColor={theme.background}
+      />
+      {children}
+    </ThemeContext.Provider>
   );
 }
 

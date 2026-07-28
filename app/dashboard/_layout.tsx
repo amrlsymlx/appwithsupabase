@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
+import { Platform } from "react-native";
 import { useTheme } from "../../lib/theme";
 
 export default function DashboardTabsLayout() {
@@ -16,9 +17,9 @@ export default function DashboardTabsLayout() {
         tabBarStyle: {
           backgroundColor: theme.surface,
           borderTopColor: theme.border,
-          height: 64,
+                  height: Platform.OS === "ios" ? 78 : 64,
           paddingTop: 6,
-          paddingBottom: 6,
+                  paddingBottom: Platform.OS === "ios" ? 16 : 6,
         },
         tabBarLabelStyle: {
           fontSize: 12,
