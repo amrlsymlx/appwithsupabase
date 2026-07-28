@@ -2,8 +2,10 @@ import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -12,26 +14,66 @@ import {
   TextInput,
   View,
 } from "react-native";
+import RecaptchaWidget from "react-google-recaptcha";
+import { WebView } from "react-native-webview";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 
-type CaptchaChallenge = {
-  text: string;
-};
-
-const createCaptchaChallenge = (): CaptchaChallenge => {
-  const characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const text = Array.from({ length: 5 }, () => {
-    const index = Math.floor(Math.random() * characters.length);
-    return characters[index];
-  }).join("");
-
-  return {
-    text: text.toLowerCase(),
-  };
-};
-
 const validateEmail = (email: string) => /\S+@\S+\.\S+/.test(email.trim());
+const RECAPTCHA_SITE_KEY = process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY || "";
+const RECAPTCHA_BASE_URL =
+  process.env.EXPO_PUBLIC_RECAPTCHA_BASE_URL || "https://localhost";
+const RECAPTCHA_CONFIGURED = RECAPTCHA_SITE_KEY.length > 0;
+
+const createRecaptchaHtml = (siteKey: string) => `<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f8fafc;
+        font-family: Arial, sans-serif;
+      }
+      .card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div
+        class="g-recaptcha"
+        data-sitekey="${siteKey}"
+        data-callback="onRecaptchaVerified"
+        data-expired-callback="onRecaptchaExpired"
+        data-error-callback="onRecaptchaError"
+      ></div>
+    </div>
+    <script>
+      function post(payload) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+      }
+      function onRecaptchaVerified(token) {
+        post({ type: "verified", token: token });
+      }
+      function onRecaptchaExpired() {
+        post({ type: "expired" });
+      }
+      function onRecaptchaError() {
+        post({ type: "error" });
+      }
+    </script>
+  </body>
+</html>`;
 
 export default function ForgotPassword() {
   const router = useRouter();
@@ -40,23 +82,18 @@ export default function ForgotPassword() {
   const [emailTouched, setEmailTouched] = useState(false);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  const [captchaChallenge, setCaptchaChallenge] = useState<CaptchaChallenge>(
-    () => createCaptchaChallenge(),
-  );
-  const [captchaInput, setCaptchaInput] = useState("");
+  const [showRecaptchaModal, setShowRecaptchaModal] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState("");
+  const [isRecaptchaVerified, setIsRecaptchaVerified] = useState(false);
+  const [recaptchaLoading, setRecaptchaLoading] = useState(true);
 
   const emailError = emailTouched && !validateEmail(email);
-  const normalizedCaptchaInput = captchaInput.trim().toLowerCase();
-  const isCaptchaCorrect =
-    normalizedCaptchaInput.length > 0 &&
-    normalizedCaptchaInput === captchaChallenge.text;
   const canSendResetEmail =
-    validateEmail(email) && isCaptchaCorrect && !loading && SUPABASE_CONFIGURED;
-
-  const refreshCaptcha = () => {
-    setCaptchaInput("");
-    setCaptchaChallenge(createCaptchaChallenge());
-  };
+    validateEmail(email) &&
+    isRecaptchaVerified &&
+    !loading &&
+    SUPABASE_CONFIGURED &&
+    RECAPTCHA_CONFIGURED;
 
   const handleSendResetEmail = async () => {
     setEmailTouched(true);
@@ -67,8 +104,12 @@ export default function ForgotPassword() {
       setStatus("Please enter a valid email address.");
       return;
     }
-    if (!isCaptchaCorrect) {
-      setStatus("Captcha answer is incorrect.");
+    if (!RECAPTCHA_CONFIGURED) {
+      setStatus("reCAPTCHA is not configured. Add EXPO_PUBLIC_RECAPTCHA_SITE_KEY.");
+      return;
+    }
+    if (!isRecaptchaVerified || !recaptchaToken) {
+      setStatus("Please complete reCAPTCHA verification.");
       return;
     }
 
@@ -175,52 +216,63 @@ export default function ForgotPassword() {
               </Text>
             ) : null}
 
-            <View style={styles.captchaContainer}>
-              <Text style={styles.captchaLabel}>Captcha challenge</Text>
-              <View style={styles.captchaChallengeRow}>
-                <Text style={styles.captchaValue}>
-                  {captchaChallenge.text.toUpperCase()}
-                </Text>
+            <View style={styles.robotContainer}>
+              {Platform.OS === "web" ? (
+                <View style={styles.webRecaptchaWrap}>
+                  <Text style={[styles.robotText, { color: theme.text }]}>
+                    Verify you are a human
+                  </Text>
+                  <RecaptchaWidget
+                    sitekey={RECAPTCHA_SITE_KEY}
+                    onChange={(token: string | null) => {
+                      setRecaptchaToken(token || "");
+                      setIsRecaptchaVerified(!!token);
+                      if (status) setStatus("");
+                    }}
+                    onExpired={() => {
+                      setRecaptchaToken("");
+                      setIsRecaptchaVerified(false);
+                      setStatus("reCAPTCHA expired. Please verify again.");
+                    }}
+                    onErrored={() => {
+                      setRecaptchaToken("");
+                      setIsRecaptchaVerified(false);
+                      setStatus("reCAPTCHA failed. Please try again.");
+                    }}
+                  />
+                </View>
+              ) : (
                 <Pressable
-                  onPress={refreshCaptcha}
-                  style={({ pressed }) => [
-                    styles.captchaRefreshButton,
-                    pressed && styles.captchaRefreshButtonPressed,
-                  ]}
+                  onPress={() => {
+                    setRecaptchaLoading(true);
+                    setShowRecaptchaModal(true);
+                    if (status) setStatus("");
+                  }}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: isRecaptchaVerified }}
+                  style={styles.robotRow}
                 >
-                  <Text style={styles.captchaRefreshText}>Refresh</Text>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      isRecaptchaVerified && styles.checkboxChecked,
+                      {
+                        borderColor:
+                          theme.name === "dark"
+                            ? "rgba(255, 255, 255, 0.4)"
+                            : "#94a3b8",
+                      },
+                    ]}
+                  >
+                    {isRecaptchaVerified ? (
+                      <Text style={styles.checkboxMark}>✓</Text>
+                    ) : null}
+                  </View>
+                  <Text style={[styles.robotText, { color: theme.text }]}>
+                    Verify you are a human
+                  </Text>
                 </Pressable>
-              </View>
-              <TextInput
-                style={[
-                  styles.input,
-                  styles.captchaInput,
-                  {
-                    backgroundColor:
-                      theme.name === "dark"
-                        ? "rgba(17, 24, 39, 0.85)"
-                        : "rgba(255, 255, 255, 0.95)",
-                    borderColor:
-                      theme.name === "dark"
-                        ? "rgba(255, 255, 255, 0.14)"
-                        : "rgba(15, 23, 42, 0.1)",
-                    color: theme.name === "dark" ? "#f9fafb" : "#111827",
-                  },
-                ]}
-                placeholderTextColor={
-                  theme.name === "dark" ? "#cbd5e1" : "#6b7280"
-                }
-                placeholder="Type captcha text"
-                value={captchaInput}
-                onChangeText={(value) => {
-                  setCaptchaInput(value);
-                  if (status) setStatus("");
-                }}
-                autoCapitalize="characters"
-              />
-              {captchaInput.trim().length > 0 && !isCaptchaCorrect ? (
-                <Text style={styles.fieldError}>Captcha answer is incorrect.</Text>
-              ) : null}
+              )}
             </View>
 
             {status ? <Text style={styles.status}>{status}</Text> : null}
@@ -238,6 +290,17 @@ export default function ForgotPassword() {
                 {loading ? "Sending..." : "Send reset email"}
               </Text>
             </Pressable>
+            {!RECAPTCHA_CONFIGURED ? (
+              <Text style={styles.fieldError}>
+                Set EXPO_PUBLIC_RECAPTCHA_SITE_KEY in .env to enable this action.
+              </Text>
+            ) : Platform.OS !== "web" ? (
+              <Text style={styles.recaptchaHint}>
+                If you see &quot;Invalid domain for site key&quot;, set
+                EXPO_PUBLIC_RECAPTCHA_BASE_URL and whitelist that domain in
+                reCAPTCHA settings.
+              </Text>
+            ) : null}
 
             <Pressable
               style={({ pressed }) => [
@@ -251,6 +314,72 @@ export default function ForgotPassword() {
           </View>
         </View>
       </ScrollView>
+      <Modal
+        visible={showRecaptchaModal && Platform.OS !== "web"}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowRecaptchaModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Complete reCAPTCHA</Text>
+            <View style={styles.webviewWrap}>
+              <WebView
+                originWhitelist={["*"]}
+                source={{
+                  html: createRecaptchaHtml(RECAPTCHA_SITE_KEY),
+                  baseUrl: RECAPTCHA_BASE_URL,
+                }}
+                onLoadEnd={() => setRecaptchaLoading(false)}
+                onMessage={(event) => {
+                  try {
+                    const payload = JSON.parse(event.nativeEvent.data || "{}");
+                    if (payload.type === "verified" && payload.token) {
+                      setRecaptchaToken(payload.token);
+                      setIsRecaptchaVerified(true);
+                      setShowRecaptchaModal(false);
+                      setStatus("");
+                      return;
+                    }
+                    if (payload.type === "expired") {
+                      setRecaptchaToken("");
+                      setIsRecaptchaVerified(false);
+                      setStatus("reCAPTCHA expired. Please verify again.");
+                      return;
+                    }
+                    if (payload.type === "error") {
+                      setRecaptchaToken("");
+                      setIsRecaptchaVerified(false);
+                      setStatus("reCAPTCHA failed. Please try again.");
+                    }
+                  } catch {
+                    setRecaptchaToken("");
+                    setIsRecaptchaVerified(false);
+                    setStatus("Unable to process reCAPTCHA result.");
+                  }
+                }}
+              />
+              {recaptchaLoading ? (
+                <View style={styles.loadingOverlay}>
+                  <ActivityIndicator size="small" color="#2563eb" />
+                </View>
+              ) : null}
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.modalCloseButton,
+                pressed && styles.secondaryButtonPressed,
+              ]}
+              onPress={() => {
+                setShowRecaptchaModal(false);
+                setRecaptchaLoading(true);
+              }}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -305,47 +434,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 8,
   },
-  captchaContainer: {
-    marginBottom: 8,
+  robotContainer: {
+    marginBottom: 12,
   },
-  captchaLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#0f172a",
-    marginBottom: 6,
+  webRecaptchaWrap: {
+    gap: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  captchaChallengeRow: {
+  robotRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 8,
     backgroundColor: "#e2e8f0",
   },
-  captchaValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 1.8,
-    color: "#0f172a",
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    marginRight: 8,
   },
-  captchaRefreshButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#cbd5e1",
+  checkboxChecked: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
   },
-  captchaRefreshButtonPressed: {
-    opacity: 0.8,
-  },
-  captchaRefreshText: {
-    color: "#0f172a",
+  checkboxMark: {
+    color: "#ffffff",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
   },
-  captchaInput: {
-    marginBottom: 6,
+  robotText: {
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: "600",
   },
   status: {
     color: "#075985",
@@ -385,5 +512,59 @@ const styles = StyleSheet.create({
   },
   secondaryButtonPressed: {
     opacity: 0.7,
+  },
+  recaptchaHint: {
+    color: "#64748b",
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 18,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    height: 360,
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    padding: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  webviewWrap: {
+    flex: 1,
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.75)",
+  },
+  modalCloseButton: {
+    alignSelf: "center",
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#e2e8f0",
+  },
+  modalCloseText: {
+    color: "#0f172a",
+    fontSize: 13,
+    fontWeight: "600",
   },
 });
