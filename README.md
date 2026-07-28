@@ -25,6 +25,37 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
+## Supabase password reset setup
+
+To make **Forgot password** work correctly:
+
+1. In Supabase Dashboard, go to **Authentication → URL Configuration**.
+2. Add this redirect URL for your app scheme:
+
+   ```text
+   vcode://reset-password
+   ```
+
+3. In **Authentication → Email Templates → Reset Password**, keep the default `{{ .ConfirmationURL }}` link in the template.
+
+After this, when a user taps **Forgot password** and enters their email, Supabase sends a reset email if the account exists.
+
+### Password-changed success email
+
+The app also calls this Supabase Edge Function after password reset succeeds:
+
+```text
+send-password-change-success-email
+```
+
+Create and deploy that function to send your custom "password changed successfully" email, and accept:
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
 In the output, you'll find options to open the app in a
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)

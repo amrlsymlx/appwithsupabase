@@ -261,6 +261,17 @@ export default function Index() {
               </Pressable>
             </View>
 
+            <Pressable
+              style={({ pressed }) => [
+                styles.forgotPasswordButton,
+                pressed && styles.secondaryButtonPressed,
+              ]}
+              onPress={() => router.push("/forgot-password")}
+              disabled={!SUPABASE_CONFIGURED}
+            >
+              <Text style={styles.forgotPasswordButtonText}>Forgot password?</Text>
+            </Pressable>
+
             {error ? (
               <Text style={[styles.error, { color: theme.error }]}>
                 {error}
@@ -432,8 +443,18 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     fontSize: 14,
   },
-  secondaryButton: {
-    marginTop: 8,
+  forgotPasswordButton: {
+    alignSelf: "flex-end",
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  secondaryButtonPressed: {
+    opacity: 0.7,
+  },
+  forgotPasswordButtonText: {
+    color: "#2563eb",
+    fontSize: 13,
+    fontWeight: "600",
   },
   signUpContainer: {
     flexDirection: "row",
