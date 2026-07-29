@@ -2,24 +2,24 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import {
-  clearRememberedCredentials,
-  getRememberedCredentials,
-  setAuthSession,
-  setRememberedCredentials,
+    clearRememberedCredentials,
+    getRememberedCredentials,
+    setAuthSession,
+    setRememberedCredentials,
 } from "../lib/storage";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
-import { useTheme } from "../lib/theme";
+import { ThemeToggle, useTheme } from "../lib/theme";
 
 export default function Index() {
   const router = useRouter();
@@ -133,6 +133,7 @@ export default function Index() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
     >
+      <ThemeToggle />
       <ScrollView
         style={[styles.scrollView, { backgroundColor: theme.background }]}
         contentContainerStyle={styles.scrollContent}

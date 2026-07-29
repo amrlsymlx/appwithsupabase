@@ -1,20 +1,29 @@
 import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { StyleSheet, View } from "react-native";
-import { ThemeProvider, ThemeToggle } from "../lib/theme";
+import { ThemeProvider, useTheme } from "../lib/theme";
 
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <View style={styles.root}>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            presentation: "card",
-          }}
-        />
-        <ThemeToggle />
-      </View>
+      <RootNavigator />
     </ThemeProvider>
+  );
+}
+
+function RootNavigator() {
+  const { themeName } = useTheme();
+
+  return (
+    <View style={styles.root}>
+      <StatusBar style={themeName === "light" ? "dark" : "light"} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          presentation: "card",
+        }}
+      />
+    </View>
   );
 }
 
