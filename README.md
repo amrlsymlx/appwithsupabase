@@ -19,6 +19,7 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
    EXPO_PUBLIC_RECAPTCHA_SITE_KEY=your-google-recaptcha-site-key
    EXPO_PUBLIC_RECAPTCHA_BASE_URL=https://your-domain.com
+   EXPO_PUBLIC_RECOVERY_LINK_BLOCK_HOURS=24
    ```
 
 3. Start the app

@@ -1,6 +1,7 @@
-import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
+import RecaptchaWidget from "react-google-recaptcha";
 import {
   ActivityIndicator,
   Alert,
@@ -14,16 +15,38 @@ import {
   TextInput,
   View,
 } from "react-native";
-import RecaptchaWidget from "react-google-recaptcha";
 import { WebView } from "react-native-webview";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 
 const validateEmail = (email: string) => /\S+@\S+\.\S+/.test(email.trim());
 const RECAPTCHA_SITE_KEY = process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY || "";
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
 const RECAPTCHA_BASE_URL =
-  process.env.EXPO_PUBLIC_RECAPTCHA_BASE_URL || "https://localhost";
+  process.env.EXPO_PUBLIC_RECAPTCHA_BASE_URL ||
+  SUPABASE_URL ||
+  "https://localhost";
 const RECAPTCHA_CONFIGURED = RECAPTCHA_SITE_KEY.length > 0;
+const RECAPTCHA_PARSED_BASE_URL = (() => {
+  try {
+    return new URL(RECAPTCHA_BASE_URL);
+  } catch {
+    return null;
+  }
+})();
+const RECAPTCHA_WHITELIST_DOMAIN = (() => {
+  try {
+    const host = new URL(RECAPTCHA_BASE_URL).host;
+    return host || "localhost";
+  } catch {
+    return "localhost";
+  }
+})();
+const RECAPTCHA_BASE_URL_MISCONFIGURED =
+  !RECAPTCHA_PARSED_BASE_URL ||
+  RECAPTCHA_PARSED_BASE_URL.protocol !== "https:" ||
+  RECAPTCHA_WHITELIST_DOMAIN === "localhost" ||
+  RECAPTCHA_WHITELIST_DOMAIN === "127.0.0.1";
 
 const createRecaptchaHtml = (siteKey: string) => `<!doctype html>
 <html>
@@ -88,6 +111,7 @@ export default function ForgotPassword() {
   const [recaptchaLoading, setRecaptchaLoading] = useState(true);
 
   const emailError = emailTouched && !validateEmail(email);
+  const isEmailValid = validateEmail(email.trim());
   const canSendResetEmail =
     validateEmail(email) &&
     isRecaptchaVerified &&
@@ -105,7 +129,9 @@ export default function ForgotPassword() {
       return;
     }
     if (!RECAPTCHA_CONFIGURED) {
-      setStatus("reCAPTCHA is not configured. Add EXPO_PUBLIC_RECAPTCHA_SITE_KEY.");
+      setStatus(
+        "reCAPTCHA is not configured. Add EXPO_PUBLIC_RECAPTCHA_SITE_KEY.",
+      );
       return;
     }
     if (!isRecaptchaVerified || !recaptchaToken) {
@@ -123,9 +149,12 @@ export default function ForgotPassword() {
 
     setLoading(true);
     const redirectTo = Linking.createURL("/reset-password");
-    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo,
-    });
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      normalizedEmail,
+      {
+        redirectTo,
+      },
+    );
     setLoading(false);
 
     if (error) {
@@ -178,7 +207,9 @@ export default function ForgotPassword() {
               },
             ]}
           >
-            <Text style={[styles.title, { color: theme.text }]}>Forgot password</Text>
+            <Text style={[styles.title, { color: theme.text }]}>
+              Forgot password
+            </Text>
             <Text style={[styles.subtitle, { color: theme.secondaryText }]}>
               Enter your email to receive a reset link.
             </Text>
@@ -198,12 +229,18 @@ export default function ForgotPassword() {
                   color: theme.name === "dark" ? "#f9fafb" : "#111827",
                 },
               ]}
-              placeholderTextColor={theme.name === "dark" ? "#cbd5e1" : "#6b7280"}
+              placeholderTextColor={
+                theme.name === "dark" ? "#cbd5e1" : "#6b7280"
+              }
               placeholder="Email"
               value={email}
               onChangeText={(value) => {
                 setEmail(value);
                 if (status) setStatus("");
+                if (!validateEmail(value.trim())) {
+                  setRecaptchaToken("");
+                  setIsRecaptchaVerified(false);
+                }
               }}
               onBlur={() => setEmailTouched(true)}
               keyboardType="email-address"
@@ -216,64 +253,72 @@ export default function ForgotPassword() {
               </Text>
             ) : null}
 
-            <View style={styles.robotContainer}>
-              {Platform.OS === "web" ? (
-                <View style={styles.webRecaptchaWrap}>
-                  <Text style={[styles.robotText, { color: theme.text }]}>
-                    Verify you are a human
-                  </Text>
-                  <RecaptchaWidget
-                    sitekey={RECAPTCHA_SITE_KEY}
-                    onChange={(token: string | null) => {
-                      setRecaptchaToken(token || "");
-                      setIsRecaptchaVerified(!!token);
+            {isEmailValid ? (
+              <View style={styles.robotContainer}>
+                {Platform.OS === "web" ? (
+                  <View style={styles.webRecaptchaWrap}>
+                    <Text style={[styles.robotText, { color: theme.text }]}>
+                      Verify you are a human
+                    </Text>
+                    <RecaptchaWidget
+                      sitekey={RECAPTCHA_SITE_KEY}
+                      onChange={(token: string | null) => {
+                        setRecaptchaToken(token || "");
+                        setIsRecaptchaVerified(!!token);
+                        if (status) setStatus("");
+                      }}
+                      onExpired={() => {
+                        setRecaptchaToken("");
+                        setIsRecaptchaVerified(false);
+                        setStatus("reCAPTCHA expired. Please verify again.");
+                      }}
+                      onErrored={() => {
+                        setRecaptchaToken("");
+                        setIsRecaptchaVerified(false);
+                        setStatus("reCAPTCHA failed. Please try again.");
+                      }}
+                    />
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      if (RECAPTCHA_BASE_URL_MISCONFIGURED) {
+                        setStatus(
+                          `Invalid reCAPTCHA base URL. Set EXPO_PUBLIC_RECAPTCHA_BASE_URL to an HTTPS domain and whitelist ${RECAPTCHA_WHITELIST_DOMAIN} in Google reCAPTCHA settings.`,
+                        );
+                        return;
+                      }
+                      setRecaptchaLoading(true);
+                      setShowRecaptchaModal(true);
                       if (status) setStatus("");
                     }}
-                    onExpired={() => {
-                      setRecaptchaToken("");
-                      setIsRecaptchaVerified(false);
-                      setStatus("reCAPTCHA expired. Please verify again.");
-                    }}
-                    onErrored={() => {
-                      setRecaptchaToken("");
-                      setIsRecaptchaVerified(false);
-                      setStatus("reCAPTCHA failed. Please try again.");
-                    }}
-                  />
-                </View>
-              ) : (
-                <Pressable
-                  onPress={() => {
-                    setRecaptchaLoading(true);
-                    setShowRecaptchaModal(true);
-                    if (status) setStatus("");
-                  }}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: isRecaptchaVerified }}
-                  style={styles.robotRow}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      isRecaptchaVerified && styles.checkboxChecked,
-                      {
-                        borderColor:
-                          theme.name === "dark"
-                            ? "rgba(255, 255, 255, 0.4)"
-                            : "#94a3b8",
-                      },
-                    ]}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: isRecaptchaVerified }}
+                    style={styles.robotRow}
                   >
-                    {isRecaptchaVerified ? (
-                      <Text style={styles.checkboxMark}>✓</Text>
-                    ) : null}
-                  </View>
-                  <Text style={[styles.robotText, { color: theme.text }]}>
-                    Verify you are a human
-                  </Text>
-                </Pressable>
-              )}
-            </View>
+                    <View
+                      style={[
+                        styles.checkbox,
+                        isRecaptchaVerified && styles.checkboxChecked,
+                        {
+                          borderColor:
+                            theme.name === "dark"
+                              ? "rgba(255, 255, 255, 0.4)"
+                              : "#94a3b8",
+                        },
+                      ]}
+                    >
+                      {isRecaptchaVerified ? (
+                        <Text style={styles.checkboxMark}>✓</Text>
+                      ) : null}
+                    </View>
+                    <Text style={[styles.robotText, { color: theme.text }]}>
+                      Verify you are a human
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            ) : null}
 
             {status ? <Text style={styles.status}>{status}</Text> : null}
 
@@ -292,13 +337,14 @@ export default function ForgotPassword() {
             </Pressable>
             {!RECAPTCHA_CONFIGURED ? (
               <Text style={styles.fieldError}>
-                Set EXPO_PUBLIC_RECAPTCHA_SITE_KEY in .env to enable this action.
+                Set EXPO_PUBLIC_RECAPTCHA_SITE_KEY in .env to enable this
+                action.
               </Text>
-            ) : Platform.OS !== "web" ? (
+            ) : Platform.OS !== "web" && RECAPTCHA_BASE_URL_MISCONFIGURED ? (
               <Text style={styles.recaptchaHint}>
-                If you see &quot;Invalid domain for site key&quot;, set
-                EXPO_PUBLIC_RECAPTCHA_BASE_URL and whitelist that domain in
-                reCAPTCHA settings.
+                Set EXPO_PUBLIC_RECAPTCHA_BASE_URL to an HTTPS domain and
+                whitelist {RECAPTCHA_WHITELIST_DOMAIN} in Google reCAPTCHA
+                settings.
               </Text>
             ) : null}
 

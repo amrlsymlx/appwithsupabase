@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { deleteItem, getItem, setItem } from "../lib/storage";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 
@@ -81,6 +82,66 @@ const validatePassword = (password: string) => {
   );
 };
 
+const CONSUMED_RECOVERY_LINK_KEY_PREFIX = "consumed_recovery_link:";
+const DEFAULT_RECOVERY_LINK_BLOCK_HOURS = 24;
+const configuredRecoveryLinkBlockHours = Number(
+  process.env.EXPO_PUBLIC_RECOVERY_LINK_BLOCK_HOURS,
+);
+const recoveryLinkBlockHours =
+  Number.isFinite(configuredRecoveryLinkBlockHours) &&
+  configuredRecoveryLinkBlockHours > 0
+    ? configuredRecoveryLinkBlockHours
+    : DEFAULT_RECOVERY_LINK_BLOCK_HOURS;
+const CONSUMED_RECOVERY_LINK_WINDOW_MS =
+  recoveryLinkBlockHours * 60 * 60 * 1000;
+
+type ConsumedRecoveryLinkMarker = {
+  consumedAt: number;
+};
+
+const parseConsumedRecoveryMarker = (
+  value: string | null,
+): ConsumedRecoveryLinkMarker | null => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as {
+      consumedAt?: unknown;
+    };
+
+    if (
+      typeof parsed.consumedAt === "number" &&
+      Number.isFinite(parsed.consumedAt)
+    ) {
+      return {
+        consumedAt: parsed.consumedAt,
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const getRecoveryLinkFingerprint = ({
+  code,
+  accessToken,
+  refreshToken,
+}: RecoveryParams) => {
+  if (code) {
+    return `code:${code}`;
+  }
+
+  if (accessToken && refreshToken) {
+    return `token:${accessToken}:${refreshToken}`;
+  }
+
+  return null;
+};
+
 export default function ResetPassword() {
   const router = useRouter();
   const { theme } = useTheme();
@@ -94,6 +155,9 @@ export default function ResetPassword() {
   const [sessionReady, setSessionReady] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
+  const [recoveryFingerprint, setRecoveryFingerprint] = useState<string | null>(
+    null,
+  );
   const [captchaChallenge, setCaptchaChallenge] = useState<CaptchaChallenge>(
     () => createCaptchaChallenge(),
   );
@@ -148,14 +212,50 @@ export default function ResetPassword() {
         return;
       }
 
-      const { code, accessToken, refreshToken } = extractRecoveryParams(
-        urlToParse,
-      );
+      const { code, accessToken, refreshToken } =
+        extractRecoveryParams(urlToParse);
+      const fingerprint = getRecoveryLinkFingerprint({
+        code,
+        accessToken,
+        refreshToken,
+      });
+
+      if (fingerprint) {
+        const consumedMarkerKey = `${CONSUMED_RECOVERY_LINK_KEY_PREFIX}${fingerprint}`;
+        const consumedRaw = await getItem(consumedMarkerKey);
+        const consumedMarker = parseConsumedRecoveryMarker(consumedRaw);
+
+        if (consumedMarker) {
+          const isStillBlocked =
+            Date.now() - consumedMarker.consumedAt <
+            CONSUMED_RECOVERY_LINK_WINDOW_MS;
+          if (isStillBlocked) {
+            if (!cancelled) {
+              setStatus(
+                "This password reset link has already been used. Request a new reset link.",
+              );
+              setPreparingSession(false);
+            }
+            return;
+          }
+
+          await deleteItem(consumedMarkerKey);
+        } else if (consumedRaw) {
+          await deleteItem(consumedMarkerKey);
+        }
+
+        if (consumedRaw && !consumedMarker) {
+          if (!cancelled) {
+            setStatus(null);
+          }
+        }
+      }
 
       const { data: existingSessionData } = await supabase.auth.getSession();
       if (existingSessionData.session) {
         const { data: userData } = await supabase.auth.getUser();
         if (!cancelled) {
+          setRecoveryFingerprint(fingerprint);
           setUserEmail(userData.user?.email || "");
           setSessionReady(true);
           setPreparingSession(false);
@@ -195,6 +295,7 @@ export default function ResetPassword() {
 
       const { data: userData } = await supabase.auth.getUser();
       if (!cancelled) {
+        setRecoveryFingerprint(fingerprint);
         setUserEmail(userData.user?.email || "");
         setSessionReady(true);
         setPreparingSession(false);
@@ -289,6 +390,17 @@ export default function ResetPassword() {
         "Your password has been reset successfully.",
       );
     }
+
+    if (recoveryFingerprint) {
+      await setItem(
+        `${CONSUMED_RECOVERY_LINK_KEY_PREFIX}${recoveryFingerprint}`,
+        JSON.stringify({
+          consumedAt: Date.now(),
+        }),
+        true,
+      );
+    }
+
     await supabase.auth.signOut();
     router.replace("/");
   };
@@ -372,7 +484,9 @@ export default function ResetPassword() {
               />
               <Pressable
                 onPress={() => setShowPassword((prev) => !prev)}
-                accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                accessibilityLabel={
+                  showPassword ? "Hide password" : "Show password"
+                }
                 style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
                 disabled={preparingSession || !sessionReady}
               >
@@ -391,14 +505,19 @@ export default function ResetPassword() {
                 </Text>
                 <View style={styles.passwordHintItem}>
                   <MaterialCommunityIcons
-                    name={passwordChecks.minLength ? "check-circle" : "circle-outline"}
+                    name={
+                      passwordChecks.minLength
+                        ? "check-circle"
+                        : "circle-outline"
+                    }
                     size={14}
                     color={passwordChecks.minLength ? "#16a34a" : "#64748b"}
                   />
                   <Text
                     style={[
                       styles.passwordHintText,
-                      passwordChecks.minLength && styles.passwordHintTextSuccess,
+                      passwordChecks.minLength &&
+                        styles.passwordHintTextSuccess,
                     ]}
                   >
                     At least 6 characters
@@ -407,7 +526,9 @@ export default function ResetPassword() {
                 <View style={styles.passwordHintItem}>
                   <MaterialCommunityIcons
                     name={
-                      passwordChecks.hasUppercase ? "check-circle" : "circle-outline"
+                      passwordChecks.hasUppercase
+                        ? "check-circle"
+                        : "circle-outline"
                     }
                     size={14}
                     color={passwordChecks.hasUppercase ? "#16a34a" : "#64748b"}
@@ -415,7 +536,8 @@ export default function ResetPassword() {
                   <Text
                     style={[
                       styles.passwordHintText,
-                      passwordChecks.hasUppercase && styles.passwordHintTextSuccess,
+                      passwordChecks.hasUppercase &&
+                        styles.passwordHintTextSuccess,
                     ]}
                   >
                     One uppercase letter
@@ -424,7 +546,9 @@ export default function ResetPassword() {
                 <View style={styles.passwordHintItem}>
                   <MaterialCommunityIcons
                     name={
-                      passwordChecks.hasLowercase ? "check-circle" : "circle-outline"
+                      passwordChecks.hasLowercase
+                        ? "check-circle"
+                        : "circle-outline"
                     }
                     size={14}
                     color={passwordChecks.hasLowercase ? "#16a34a" : "#64748b"}
@@ -432,7 +556,8 @@ export default function ResetPassword() {
                   <Text
                     style={[
                       styles.passwordHintText,
-                      passwordChecks.hasLowercase && styles.passwordHintTextSuccess,
+                      passwordChecks.hasLowercase &&
+                        styles.passwordHintTextSuccess,
                     ]}
                   >
                     One lowercase letter
@@ -440,14 +565,19 @@ export default function ResetPassword() {
                 </View>
                 <View style={styles.passwordHintItem}>
                   <MaterialCommunityIcons
-                    name={passwordChecks.hasNumber ? "check-circle" : "circle-outline"}
+                    name={
+                      passwordChecks.hasNumber
+                        ? "check-circle"
+                        : "circle-outline"
+                    }
                     size={14}
                     color={passwordChecks.hasNumber ? "#16a34a" : "#64748b"}
                   />
                   <Text
                     style={[
                       styles.passwordHintText,
-                      passwordChecks.hasNumber && styles.passwordHintTextSuccess,
+                      passwordChecks.hasNumber &&
+                        styles.passwordHintTextSuccess,
                     ]}
                   >
                     One number
@@ -461,7 +591,9 @@ export default function ResetPassword() {
                         : "circle-outline"
                     }
                     size={14}
-                    color={passwordChecks.hasSpecialCharacter ? "#16a34a" : "#64748b"}
+                    color={
+                      passwordChecks.hasSpecialCharacter ? "#16a34a" : "#64748b"
+                    }
                   />
                   <Text
                     style={[
@@ -573,7 +705,9 @@ export default function ResetPassword() {
                 editable={!preparingSession && sessionReady}
               />
               {captchaInput.trim().length > 0 && !isCaptchaCorrect ? (
-                <Text style={styles.errorText}>Captcha answer is incorrect.</Text>
+                <Text style={styles.errorText}>
+                  Captcha answer is incorrect.
+                </Text>
               ) : null}
             </View>
 
