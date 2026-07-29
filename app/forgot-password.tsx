@@ -141,7 +141,10 @@ export default function ForgotPassword() {
     }
 
     setLoading(true);
-    const redirectTo = Linking.createURL("/reset-password");
+    const DEFAULT_REDIRECT = Linking.createURL("/reset-password");
+    const RESET_REDIRECT_RAW = process.env.EXPO_PUBLIC_RESET_REDIRECT_URL || "";
+    const RESET_REDIRECT = RESET_REDIRECT_RAW.trim().replace(/^['\"]|['\"]$/g, "") || DEFAULT_REDIRECT;
+    const redirectTo = RESET_REDIRECT;
     const { error } = await supabase.auth.resetPasswordForEmail(
       normalizedEmail,
       {
