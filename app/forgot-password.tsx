@@ -22,31 +22,24 @@ import { useTheme } from "../lib/theme";
 const validateEmail = (email: string) => /\S+@\S+\.\S+/.test(email.trim());
 const RECAPTCHA_SITE_KEY = process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY || "";
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
-const RECAPTCHA_BASE_URL =
+const RECAPTCHA_BASE_URL_RAW =
   process.env.EXPO_PUBLIC_RECAPTCHA_BASE_URL ||
   SUPABASE_URL ||
   "https://localhost";
+const RECAPTCHA_BASE_URL = RECAPTCHA_BASE_URL_RAW.trim().replace(
+  /^['\"]|['\"]$/g,
+  "",
+);
 const RECAPTCHA_CONFIGURED = RECAPTCHA_SITE_KEY.length > 0;
-const RECAPTCHA_PARSED_BASE_URL = (() => {
-  try {
-    return new URL(RECAPTCHA_BASE_URL);
-  } catch {
-    return null;
-  }
-})();
-const RECAPTCHA_WHITELIST_DOMAIN = (() => {
-  try {
-    const host = new URL(RECAPTCHA_BASE_URL).host;
-    return host || "localhost";
-  } catch {
-    return "localhost";
-  }
-})();
+const RECAPTCHA_WHITELIST_DOMAIN = RECAPTCHA_BASE_URL.replace(
+  /^https?:\/\//i,
+  "",
+)
+  .split("/")[0]
+  .toLowerCase();
 const RECAPTCHA_BASE_URL_MISCONFIGURED =
-  !RECAPTCHA_PARSED_BASE_URL ||
-  RECAPTCHA_PARSED_BASE_URL.protocol !== "https:" ||
-  RECAPTCHA_WHITELIST_DOMAIN === "localhost" ||
-  RECAPTCHA_WHITELIST_DOMAIN === "127.0.0.1";
+  !/^https:\/\//i.test(RECAPTCHA_BASE_URL) ||
+  RECAPTCHA_WHITELIST_DOMAIN.length === 0;
 
 const createRecaptchaHtml = (siteKey: string) => `<!doctype html>
 <html>
@@ -106,9 +99,9 @@ export default function ForgotPassword() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [showRecaptchaModal, setShowRecaptchaModal] = useState(false);
+  const [recaptchaLoading, setRecaptchaLoading] = useState(true);
   const [recaptchaToken, setRecaptchaToken] = useState("");
   const [isRecaptchaVerified, setIsRecaptchaVerified] = useState(false);
-  const [recaptchaLoading, setRecaptchaLoading] = useState(true);
 
   const emailError = emailTouched && !validateEmail(email);
   const isEmailValid = validateEmail(email.trim());
