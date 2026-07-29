@@ -728,6 +728,18 @@ export default function ResetPassword() {
                     : "Save new password"}
               </Text>
             </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.backToSignInButton,
+                pressed && styles.backToSignInButtonPressed,
+              ]}
+              onPress={() => router.replace("/")}
+            >
+              <Text style={[styles.backToSignInText, { color: theme.secondaryText }]}>
+                Back to sign in
+              </Text>
+            </Pressable>
           </View>
         </View>
       </ScrollView>
@@ -894,5 +906,18 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "700",
+  },
+  backToSignInButton: {
+    marginTop: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+  },
+  backToSignInButtonPressed: {
+    opacity: 0.6,
+  },
+  backToSignInText: {
+    fontSize: 14,
+    fontWeight: "500",
   },
 });

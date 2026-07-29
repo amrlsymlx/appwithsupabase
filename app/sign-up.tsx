@@ -176,7 +176,7 @@ export default function SignUp() {
         // If an immediate session is returned store it; otherwise user must confirm via email
         // data may contain `session` (if auto sign-in) and `user`.
         if ((data as any)?.session) {
-          const successMessage = "Registration Success, please log in";
+          const successMessage = "Registration Success, please verify your email before sing in";
           setStatus(successMessage);
           if (Platform.OS === "web" && typeof window !== "undefined") {
             window.alert(successMessage);
