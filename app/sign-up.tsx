@@ -176,7 +176,7 @@ export default function SignUp() {
         // If an immediate session is returned store it; otherwise user must confirm via email
         // data may contain `session` (if auto sign-in) and `user`.
         if ((data as any)?.session) {
-          const successMessage = "Registration Success, please check your email inbox and verify your email before signing in";
+          const successMessage = "Registration Success, please check your mailbox and verify your email before signing in";
           setStatus(successMessage);
           if (Platform.OS === "web" && typeof window !== "undefined") {
             window.alert(successMessage);
@@ -185,7 +185,7 @@ export default function SignUp() {
           }
           router.replace("/");
         } else {
-          const successMessage = "Registration Success, please verify your email before signing in";
+          const successMessage = "Registration Success, please check your mailbox and verify your email before signing in";
           setStatus(successMessage);
           if (Platform.OS === "web" && typeof window !== "undefined") {
             window.alert(successMessage);
