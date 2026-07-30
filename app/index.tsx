@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -21,9 +22,59 @@ import {
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 
+type EmailVerificationParams = {
+  code: string | null;
+  tokenHash: string | null;
+  type: string | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  errorDescription: string | null;
+};
+
+const extractEmailVerificationParams = (
+  rawUrl: string,
+): EmailVerificationParams => {
+  const queryParams = new URLSearchParams();
+  const hashParams = new URLSearchParams();
+
+  const questionMarkIndex = rawUrl.indexOf("?");
+  const hashIndex = rawUrl.indexOf("#");
+
+  if (questionMarkIndex !== -1) {
+    const queryString =
+      hashIndex !== -1
+        ? rawUrl.slice(questionMarkIndex + 1, hashIndex)
+        : rawUrl.slice(questionMarkIndex + 1);
+    const parsedQuery = new URLSearchParams(queryString);
+    parsedQuery.forEach((value, key) => queryParams.set(key, value));
+  }
+
+  if (hashIndex !== -1) {
+    const parsedHash = new URLSearchParams(rawUrl.slice(hashIndex + 1));
+    parsedHash.forEach((value, key) => hashParams.set(key, value));
+  }
+
+  return {
+    code: queryParams.get("code") ?? hashParams.get("code"),
+    tokenHash: queryParams.get("token_hash") ?? hashParams.get("token_hash"),
+    type: queryParams.get("type") ?? hashParams.get("type"),
+    accessToken:
+      queryParams.get("access_token") ?? hashParams.get("access_token"),
+    refreshToken:
+      queryParams.get("refresh_token") ?? hashParams.get("refresh_token"),
+    errorDescription:
+      queryParams.get("error_description") ??
+      hashParams.get("error_description") ??
+      queryParams.get("error") ??
+      hashParams.get("error"),
+  };
+};
+
 export default function Index() {
   const router = useRouter();
   const { theme } = useTheme();
+  const currentUrl = Linking.useURL();
+  const processedVerificationUrlRef = useRef<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -122,6 +173,92 @@ export default function Index() {
 
     loadSession();
   }, [router]);
+
+  useEffect(() => {
+    const handleEmailVerification = async () => {
+      if (!SUPABASE_CONFIGURED || !supabase) {
+        return;
+      }
+
+      const initialUrl = await Linking.getInitialURL();
+      const urlToParse = currentUrl ?? initialUrl;
+
+      if (!urlToParse || processedVerificationUrlRef.current === urlToParse) {
+        return;
+      }
+
+      const {
+        code,
+        tokenHash,
+        type,
+        accessToken,
+        refreshToken,
+        errorDescription,
+      } = extractEmailVerificationParams(urlToParse);
+      if (type !== "signup") {
+        return;
+      }
+
+      processedVerificationUrlRef.current = urlToParse;
+
+      let verificationError: string | null = null;
+
+      if (errorDescription) {
+        verificationError = errorDescription;
+      }
+
+      if (!verificationError && code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) {
+          verificationError = error.message || "Unable to verify email.";
+        }
+      } else if (!verificationError && tokenHash) {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: "signup",
+        });
+        if (error) {
+          verificationError = error.message || "Unable to verify email.";
+        }
+      } else if (!verificationError && accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (error) {
+          verificationError = error.message || "Unable to verify email.";
+        }
+      } else if (!verificationError) {
+        // Some providers redirect back with type=signup but without verifiable tokens.
+        // Do not show a false failure toast in that case.
+        return;
+      }
+
+      if (verificationError) {
+        if (Platform.OS === "web" && typeof window !== "undefined") {
+          window.alert(`Email verification failed: ${verificationError}`);
+        } else {
+          Alert.alert("Email verification failed", verificationError);
+        }
+        return;
+      }
+
+      await supabase.auth.signOut();
+
+      const successMessage =
+        "Email verification success, you can now login using your credential";
+
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.alert(successMessage);
+      } else {
+        Alert.alert("Email verified", successMessage);
+      }
+
+      router.replace("/");
+    };
+
+    void handleEmailVerification();
+  }, [currentUrl, router]);
 
   if (checkingSession) {
     return null;
@@ -269,7 +406,9 @@ export default function Index() {
               onPress={() => router.push("/forgot-password")}
               disabled={!SUPABASE_CONFIGURED}
             >
-              <Text style={styles.forgotPasswordButtonText}>Forgot password?</Text>
+              <Text style={styles.forgotPasswordButtonText}>
+                Forgot password?
+              </Text>
             </Pressable>
 
             {error ? (

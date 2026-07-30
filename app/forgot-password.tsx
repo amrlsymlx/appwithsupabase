@@ -143,7 +143,9 @@ export default function ForgotPassword() {
     setLoading(true);
     const DEFAULT_REDIRECT = Linking.createURL("/reset-password");
     const RESET_REDIRECT_RAW = process.env.EXPO_PUBLIC_RESET_REDIRECT_URL || "";
-    const RESET_REDIRECT = RESET_REDIRECT_RAW.trim().replace(/^['\"]|['\"]$/g, "") || DEFAULT_REDIRECT;
+    const RESET_REDIRECT =
+      RESET_REDIRECT_RAW.trim().replace(/^['\"]|['\"]$/g, "") ||
+      DEFAULT_REDIRECT;
     const redirectTo = RESET_REDIRECT;
     const { error } = await supabase.auth.resetPasswordForEmail(
       normalizedEmail,
@@ -316,7 +318,18 @@ export default function ForgotPassword() {
               </View>
             ) : null}
 
-            {status ? <Text style={styles.status}>{status}</Text> : null}
+            {status ? (
+              <Text
+                style={[
+                  styles.status,
+                  {
+                    color: theme.name === "dark" ? "#fef3c7" : "#075985",
+                  },
+                ]}
+              >
+                {status}
+              </Text>
+            ) : null}
 
             <Pressable
               style={({ pressed }) => [

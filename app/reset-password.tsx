@@ -21,6 +21,8 @@ type RecoveryParams = {
   code: string | null;
   accessToken: string | null;
   refreshToken: string | null;
+  tokenHash: string | null;
+  recoveryType: string | null;
 };
 
 type CaptchaChallenge = {
@@ -62,8 +64,12 @@ const extractRecoveryParams = (rawUrl: string): RecoveryParams => {
 
   return {
     code: queryParams.get("code"),
-    accessToken: hashParams.get("access_token"),
-    refreshToken: hashParams.get("refresh_token"),
+    accessToken:
+      queryParams.get("access_token") ?? hashParams.get("access_token"),
+    refreshToken:
+      queryParams.get("refresh_token") ?? hashParams.get("refresh_token"),
+    tokenHash: queryParams.get("token_hash") ?? hashParams.get("token_hash"),
+    recoveryType: queryParams.get("type") ?? hashParams.get("type"),
   };
 };
 
@@ -130,6 +136,7 @@ const getRecoveryLinkFingerprint = ({
   code,
   accessToken,
   refreshToken,
+  tokenHash,
 }: RecoveryParams) => {
   if (code) {
     return `code:${code}`;
@@ -137,6 +144,10 @@ const getRecoveryLinkFingerprint = ({
 
   if (accessToken && refreshToken) {
     return `token:${accessToken}:${refreshToken}`;
+  }
+
+  if (tokenHash) {
+    return `token_hash:${tokenHash}`;
   }
 
   return null;
@@ -212,12 +223,14 @@ export default function ResetPassword() {
         return;
       }
 
-      const { code, accessToken, refreshToken } =
+      const { code, accessToken, refreshToken, tokenHash, recoveryType } =
         extractRecoveryParams(urlToParse);
       const fingerprint = getRecoveryLinkFingerprint({
         code,
         accessToken,
         refreshToken,
+        tokenHash,
+        recoveryType,
       });
 
       if (fingerprint) {
@@ -266,6 +279,18 @@ export default function ResetPassword() {
 
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) {
+          if (!cancelled) {
+            setStatus(error.message || "Invalid or expired recovery link.");
+            setPreparingSession(false);
+          }
+          return;
+        }
+      } else if (tokenHash && (recoveryType === "recovery" || !recoveryType)) {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: "recovery",
+        });
         if (error) {
           if (!cancelled) {
             setStatus(error.message || "Invalid or expired recovery link.");
@@ -334,6 +359,97 @@ export default function ResetPassword() {
     }
   };
 
+  const ensureRecoverySession = async (): Promise<{
+    ok: boolean;
+    message?: string;
+  }> => {
+    if (!SUPABASE_CONFIGURED || !supabase) {
+      return {
+        ok: false,
+        message:
+          "Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env.",
+      };
+    }
+
+    const { data: existingSessionData } = await supabase.auth.getSession();
+    if (existingSessionData.session) {
+      return { ok: true };
+    }
+
+    const initialUrl = await Linking.getInitialURL();
+    const urlToParse = currentUrl ?? initialUrl;
+
+    if (!urlToParse) {
+      return {
+        ok: false,
+        message:
+          "Auth session expired. Reopen the password reset link from your email and try again.",
+      };
+    }
+
+    const { code, accessToken, refreshToken, tokenHash, recoveryType } =
+      extractRecoveryParams(urlToParse);
+
+    if (code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) {
+        return {
+          ok: false,
+          message:
+            error.message ||
+            "Unable to restore recovery session. Reopen the password reset link and try again.",
+        };
+      }
+    } else if (tokenHash && (recoveryType === "recovery" || !recoveryType)) {
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: "recovery",
+      });
+      if (error) {
+        return {
+          ok: false,
+          message:
+            error.message ||
+            "Unable to restore recovery session. Reopen the password reset link and try again.",
+        };
+      }
+    } else if (accessToken && refreshToken) {
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (error) {
+        return {
+          ok: false,
+          message:
+            error.message ||
+            "Unable to restore recovery session. Reopen the password reset link and try again.",
+        };
+      }
+    } else {
+      return {
+        ok: false,
+        message:
+          "Auth session expired. Reopen the password reset link from your email and try again.",
+      };
+    }
+
+    const { data: recoveredSessionData } = await supabase.auth.getSession();
+    if (!recoveredSessionData.session) {
+      return {
+        ok: false,
+        message:
+          "Auth session missing. Reopen the password reset link from your email and try again.",
+      };
+    }
+
+    const { data: userData } = await supabase.auth.getUser();
+    setUserEmail(userData.user?.email || "");
+    setSessionReady(true);
+
+    return { ok: true };
+  };
+
   const handleUpdatePassword = async () => {
     if (!SUPABASE_CONFIGURED || !supabase) {
       setStatus(
@@ -362,6 +478,16 @@ export default function ResetPassword() {
     setLoading(true);
     setStatus(null);
 
+    const sessionCheck = await ensureRecoverySession();
+    if (!sessionCheck.ok) {
+      setLoading(false);
+      setStatus(
+        sessionCheck.message ||
+          "Auth session missing. Reopen the password reset link from your email and try again.",
+      );
+      return;
+    }
+
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
       setLoading(false);
@@ -369,28 +495,13 @@ export default function ResetPassword() {
       return;
     }
 
-    let notificationErrorMessage = "";
     try {
       await sendPasswordChangedEmail(userEmail);
-    } catch (notificationError: any) {
-      notificationErrorMessage =
-        notificationError?.message ||
-        "Password changed, but confirmation email could not be sent.";
+    } catch {
+      // Ignore email notification failures in the reset-success UX.
     }
 
     setLoading(false);
-    if (notificationErrorMessage) {
-      Alert.alert(
-        "Password updated",
-        `Your password has been reset successfully.\n\n${notificationErrorMessage}`,
-      );
-    } else {
-      Alert.alert(
-        "Password updated",
-        "Your password has been reset successfully.",
-      );
-    }
-
     if (recoveryFingerprint) {
       await setItem(
         `${CONSUMED_RECOVERY_LINK_KEY_PREFIX}${recoveryFingerprint}`,
@@ -401,8 +512,51 @@ export default function ResetPassword() {
       );
     }
 
-    await supabase.auth.signOut();
+    const successMessage = `Password reset is success for ${userEmail || "[email]"}, you may now close this window`;
+    const finalMessage = successMessage;
+
+    const completeSuccess = async () => {
+      try {
+        await supabase.auth.signOut();
+      } finally {
+        closeCurrentWindow();
+      }
+    };
+
+    setStatus(successMessage);
+
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.alert(finalMessage);
+      await completeSuccess();
+      return;
+    }
+
+    Alert.alert("Password reset successful", finalMessage, [
+      {
+        text: "Okay",
+        onPress: () => {
+          void completeSuccess();
+        },
+      },
+    ]);
+  };
+
+  const closeCurrentWindow = () => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.close();
+
+      // Some browsers block closing tabs not opened via script.
+      if (!window.closed) {
+        router.replace("/");
+      }
+      return;
+    }
+
     router.replace("/");
+  };
+
+  const handleCancelPasswordReset = () => {
+    closeCurrentWindow();
   };
 
   return (
@@ -659,24 +813,49 @@ export default function ResetPassword() {
             ) : null}
 
             <View style={styles.captchaContainer}>
-              <Text style={styles.captchaLabel}>Captcha challenge</Text>
-              <View style={styles.captchaChallengeRow}>
-                <Text style={styles.captchaValue}>
+              <Text style={[styles.captchaLabel, { color: theme.text }]}>
+                Captcha challenge
+              </Text>
+              <View
+                style={[
+                  styles.captchaChallengeRow,
+                  {
+                    backgroundColor:
+                      theme.name === "dark"
+                        ? "rgba(17, 24, 39, 0.85)"
+                        : "#e2e8f0",
+                  },
+                ]}
+              >
+                <Text style={[styles.captchaValue, { color: theme.text }]}>
                   {captchaChallenge.text.toUpperCase()}
                 </Text>
                 <Pressable
                   onPress={refreshCaptcha}
                   style={({ pressed }) => [
                     styles.captchaRefreshButton,
+                    {
+                      backgroundColor:
+                        theme.name === "dark"
+                          ? "rgba(71, 85, 105, 0.8)"
+                          : "#cbd5e1",
+                    },
                     pressed && styles.captchaRefreshButtonPressed,
                   ]}
                 >
                   <MaterialCommunityIcons
                     name="refresh"
                     size={16}
-                    color="#0f172a"
+                    color={theme.name === "dark" ? "#f9fafb" : "#0f172a"}
                   />
-                  <Text style={styles.captchaRefreshText}>Refresh</Text>
+                  <Text
+                    style={[
+                      styles.captchaRefreshText,
+                      { color: theme.name === "dark" ? "#f9fafb" : "#0f172a" },
+                    ]}
+                  >
+                    Refresh
+                  </Text>
                 </Pressable>
               </View>
               <TextInput
@@ -734,10 +913,15 @@ export default function ResetPassword() {
                 styles.backToSignInButton,
                 pressed && styles.backToSignInButtonPressed,
               ]}
-              onPress={() => router.replace("/")}
+              onPress={handleCancelPasswordReset}
             >
-              <Text style={[styles.backToSignInText, { color: theme.secondaryText }]}>
-                Back to sign in
+              <Text
+                style={[
+                  styles.backToSignInText,
+                  { color: theme.secondaryText },
+                ]}
+              >
+                Cancel password reset
               </Text>
             </Pressable>
           </View>

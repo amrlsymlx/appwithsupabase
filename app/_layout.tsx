@@ -7,6 +7,8 @@ export default function RootLayout() {
   const showThemeToggle =
     pathname === "/" ||
     pathname === "/sign-up" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password" ||
     pathname === "/dashboard/settings";
 
   return (
