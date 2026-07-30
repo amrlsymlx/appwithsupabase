@@ -1,7 +1,9 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
+import RecaptchaWidget from "react-google-recaptcha";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -13,24 +15,80 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { WebView } from "react-native-webview";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 
-type CaptchaChallenge = {
-  text: string;
-};
+const RECAPTCHA_SITE_KEY = process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY || "";
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
+const RECAPTCHA_BASE_URL_RAW =
+  process.env.EXPO_PUBLIC_RECAPTCHA_BASE_URL ||
+  SUPABASE_URL ||
+  "https://localhost";
+const RECAPTCHA_BASE_URL = RECAPTCHA_BASE_URL_RAW.trim().replace(
+  /^['"]|['"]$/g,
+  "",
+);
+const RECAPTCHA_CONFIGURED = RECAPTCHA_SITE_KEY.length > 0;
+const RECAPTCHA_WHITELIST_DOMAIN = RECAPTCHA_BASE_URL.replace(
+  /^https?:\/\//i,
+  "",
+)
+  .split("/")[0]
+  .toLowerCase();
+const RECAPTCHA_BASE_URL_MISCONFIGURED =
+  !/^https:\/\//i.test(RECAPTCHA_BASE_URL) ||
+  RECAPTCHA_WHITELIST_DOMAIN.length === 0;
 
-const createCaptchaChallenge = (): CaptchaChallenge => {
-  const characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const text = Array.from({ length: 5 }, () => {
-    const index = Math.floor(Math.random() * characters.length);
-    return characters[index];
-  }).join("");
-
-  return {
-    text: text.toLowerCase(),
-  };
-};
+const createRecaptchaHtml = (siteKey: string) => `<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f8fafc;
+        font-family: Arial, sans-serif;
+      }
+      .card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div
+        class="g-recaptcha"
+        data-sitekey="${siteKey}"
+        data-callback="onRecaptchaVerified"
+        data-expired-callback="onRecaptchaExpired"
+        data-error-callback="onRecaptchaError"
+      ></div>
+    </div>
+    <script>
+      function post(payload) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+      }
+      function onRecaptchaVerified(token) {
+        post({ type: "verified", token: token });
+      }
+      function onRecaptchaExpired() {
+        post({ type: "expired" });
+      }
+      function onRecaptchaError() {
+        post({ type: "error" });
+      }
+    </script>
+  </body>
+</html>`;
 
 export default function SignUp() {
   const router = useRouter();
@@ -45,10 +103,10 @@ export default function SignUp() {
   const [status, setStatus] = useState<string | null>(null);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
-  const [captchaChallenge, setCaptchaChallenge] = useState<CaptchaChallenge>(
-    () => createCaptchaChallenge(),
-  );
-  const [captchaInput, setCaptchaInput] = useState("");
+  const [recaptchaToken, setRecaptchaToken] = useState("");
+  const [isRecaptchaVerified, setIsRecaptchaVerified] = useState(false);
+  const [showRecaptchaModal, setShowRecaptchaModal] = useState(false);
+  const [recaptchaLoading, setRecaptchaLoading] = useState(true);
   const [captchaError, setCaptchaError] = useState("");
 
   const validateEmail = (e: string) =>
@@ -74,23 +132,51 @@ export default function SignUp() {
     hasNumber: /[0-9]/.test(password),
     hasSpecialCharacter: /[!@#$%^&*()\-_+=\[\]{}:;,.?/]/.test(password),
   };
-  const normalizedCaptchaInput = captchaInput.trim().toLowerCase();
-  const isCaptchaCorrect =
-    normalizedCaptchaInput.length > 0 &&
-    normalizedCaptchaInput === captchaChallenge.text;
   const isFormValid =
     name.trim().length > 0 &&
     validateEmail(email) &&
     validatePassword(password) &&
     password === confirmPassword &&
     agreeToTerms &&
-    isCaptchaCorrect &&
+    isRecaptchaVerified &&
+    RECAPTCHA_CONFIGURED &&
     !!SUPABASE_CONFIGURED;
 
-  const refreshCaptcha = () => {
-    setCaptchaInput("");
-    setCaptchaError("");
-    setCaptchaChallenge(createCaptchaChallenge());
+  const isExistingUserError = (error: any) => {
+    const code = String(error?.code ?? "").toLowerCase();
+    const message = String(error?.message ?? "").toLowerCase();
+
+    return (
+      code.includes("user_already_exists") ||
+      code.includes("email_exists") ||
+      code.includes("duplicate") ||
+      code.includes("already_registered") ||
+      message.includes("already registered") ||
+      message.includes("already exists") ||
+      message.includes("already in use") ||
+      message.includes("duplicate")
+    );
+  };
+
+  const isExistingUserFromSignUpData = (data: any, normalizedEmail: string) => {
+    const user = data?.user;
+    if (!user || data?.session) {
+      return false;
+    }
+
+    const userEmail = String(user?.email ?? "")
+      .trim()
+      .toLowerCase();
+    const requestedEmail = normalizedEmail.trim().toLowerCase();
+    const identities = Array.isArray(user?.identities) ? user.identities : null;
+
+    // Supabase may return a masked user-like payload for existing emails
+    // when email confirmation is enabled, with no identities attached.
+    return (
+      userEmail === requestedEmail &&
+      identities !== null &&
+      identities.length === 0
+    );
   };
 
   const handleRegister = async () => {
@@ -126,21 +212,22 @@ export default function SignUp() {
       return;
     }
 
-    const normalizedCaptchaInput = captchaInput.trim().toLowerCase();
-
-    if (!normalizedCaptchaInput) {
-      setCaptchaError("Please solve the captcha challenge.");
-      Alert.alert("Captcha required", "Please solve the captcha challenge.");
+    if (!RECAPTCHA_CONFIGURED) {
+      setCaptchaError(
+        "reCAPTCHA is not configured. Add EXPO_PUBLIC_RECAPTCHA_SITE_KEY.",
+      );
+      Alert.alert(
+        "reCAPTCHA not configured",
+        "Add EXPO_PUBLIC_RECAPTCHA_SITE_KEY to enable verification.",
+      );
       return;
     }
 
-    if (normalizedCaptchaInput !== captchaChallenge.text) {
-      setCaptchaError("That answer was incorrect. Please try again.");
-      setCaptchaInput("");
-      setCaptchaChallenge(createCaptchaChallenge());
+    if (!isRecaptchaVerified || !recaptchaToken) {
+      setCaptchaError("Please complete the reCAPTCHA verification.");
       Alert.alert(
-        "Captcha incorrect",
-        "That answer was incorrect. Please try again.",
+        "reCAPTCHA required",
+        "Please complete the reCAPTCHA verification.",
       );
       return;
     }
@@ -161,22 +248,44 @@ export default function SignUp() {
           const fromRateLimit =
             (error as any)?.code === "over_email_send_rate_limit" ||
             (error as any)?.status === 429;
+          const duplicateEmail = isExistingUserError(error);
           const errorMessage = fromRateLimit
             ? "Too many registration emails sent. Please wait a moment and try again."
-            : error.message || "Unable to register";
+            : duplicateEmail
+              ? "An account with this email already exists. Please sign in instead."
+              : error.message || "Unable to register";
           setStatus(errorMessage);
           if (Platform.OS === "web" && typeof window !== "undefined") {
             window.alert(`Registration failed: ${errorMessage}`);
           } else {
-            Alert.alert("Registration failed", errorMessage);
+            Alert.alert(
+              duplicateEmail
+                ? "Email already registered"
+                : "Registration failed",
+              errorMessage,
+            );
           }
           return;
         }
 
-        // If an immediate session is returned store it; otherwise user must confirm via email
-        // data may contain `session` (if auto sign-in) and `user`.
-        if ((data as any)?.session) {
-          const successMessage = "Registration Success, please check your mailbox and verify your email before signing in";
+        if (isExistingUserFromSignUpData(data, normalizedEmail)) {
+          const duplicateMessage =
+            "An account with this email already exists. Please sign in instead.";
+          setStatus(duplicateMessage);
+          if (Platform.OS === "web" && typeof window !== "undefined") {
+            window.alert(`Registration failed: ${duplicateMessage}`);
+          } else {
+            Alert.alert("Email already registered", duplicateMessage);
+          }
+          return;
+        }
+
+        const createdUser = Boolean(
+          (data as any)?.user || (data as any)?.session,
+        );
+        if (createdUser) {
+          const successMessage =
+            "Registration Success, please check your mailbox and verify your email before signing in";
           setStatus(successMessage);
           if (Platform.OS === "web" && typeof window !== "undefined") {
             window.alert(successMessage);
@@ -185,14 +294,14 @@ export default function SignUp() {
           }
           router.replace("/");
         } else {
-          const successMessage = "Registration Success, please check your mailbox and verify your email before signing in";
-          setStatus(successMessage);
+          const fallbackErrorMessage =
+            "We could not create your account. The email may already be registered or the request could not be completed.";
+          setStatus(fallbackErrorMessage);
           if (Platform.OS === "web" && typeof window !== "undefined") {
-            window.alert(successMessage);
+            window.alert(`Registration failed: ${fallbackErrorMessage}`);
           } else {
-            Alert.alert("Registration Success", successMessage);
+            Alert.alert("Registration failed", fallbackErrorMessage);
           }
-          router.replace("/");
         }
       } else {
         const missingConfigMessage =
@@ -544,122 +653,98 @@ export default function SignUp() {
               </View>
             </View>
 
-            <View style={styles.captchaBox}>
-              <View style={styles.captchaPromptRow}>
-                <Text
-                  style={[styles.captchaLabel, { color: theme.secondaryText }]}
-                >
-                  Security check
-                </Text>
-                <Pressable
-                  onPress={refreshCaptcha}
-                  accessibilityLabel="Refresh captcha"
-                  style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
-                >
-                  <MaterialCommunityIcons
-                    name="refresh"
-                    size={18}
-                    color={theme.accent}
-                  />
-                </Pressable>
-              </View>
-              <View style={styles.captchaImageFrame}>
-                <View style={styles.captchaCanvas}>
-                  {Array.from({ length: 5 }, (_, index) => {
-                    const character = captchaChallenge.text[index];
-                    if (!character) {
-                      return null;
-                    }
-
-                    const top = 16 + Math.floor(Math.random() * 24);
-                    const left =
-                      12 + index * 34 + Math.floor(Math.random() * 6) - 3;
-                    const rotation = Math.floor(Math.random() * 30) - 15;
-                    const fontSize = 26 + Math.floor(Math.random() * 8);
-                    const color = [
-                      "#1f2937",
-                      "#2563eb",
-                      "#dc2626",
-                      "#7c3aed",
-                      "#0f766e",
-                    ][Math.floor(Math.random() * 5)];
-
-                    return (
-                      <Text
-                        key={`${captchaChallenge.text}-${index}`}
-                        style={[
-                          styles.captchaCharacter,
-                          {
-                            top,
-                            left,
-                            color,
-                            fontSize,
-                            transform: [{ rotate: `${rotation}deg` }],
-                          },
-                        ]}
-                      >
-                        {character.toUpperCase()}
-                      </Text>
-                    );
-                  })}
-                  {Array.from({ length: 6 }, (_, index) => {
-                    const top = 8 + index * 12 + Math.floor(Math.random() * 8);
-                    const left = 10 + Math.floor(Math.random() * 140);
-                    const width = 60 + Math.floor(Math.random() * 90);
-                    const rotation = Math.floor(Math.random() * 25) - 12;
-
-                    return (
-                      <View
-                        key={`line-${index}`}
-                        style={[
-                          styles.captchaLine,
-                          {
-                            top,
-                            left,
-                            width,
-                            transform: [{ rotate: `${rotation}deg` }],
-                          },
-                        ]}
-                      />
-                    );
-                  })}
+            {agreeToTerms ? (
+              <View style={styles.captchaBox}>
+                <View style={styles.captchaPromptRow}>
+                  <Text
+                    style={[
+                      styles.captchaLabel,
+                      { color: theme.secondaryText },
+                    ]}
+                  >
+                    Security check
+                  </Text>
                 </View>
+                {Platform.OS === "web" ? (
+                  <View style={styles.recaptchaWidgetWrap}>
+                    {RECAPTCHA_CONFIGURED ? (
+                      <RecaptchaWidget
+                        sitekey={RECAPTCHA_SITE_KEY}
+                        onChange={(token: string | null) => {
+                          setRecaptchaToken(token || "");
+                          setIsRecaptchaVerified(!!token);
+                          setCaptchaError("");
+                        }}
+                        onExpired={() => {
+                          setRecaptchaToken("");
+                          setIsRecaptchaVerified(false);
+                          setCaptchaError(
+                            "reCAPTCHA expired. Please verify again.",
+                          );
+                        }}
+                        onErrored={() => {
+                          setRecaptchaToken("");
+                          setIsRecaptchaVerified(false);
+                          setCaptchaError(
+                            "reCAPTCHA failed. Please try again.",
+                          );
+                        }}
+                      />
+                    ) : (
+                      <Text style={styles.recaptchaHintText}>
+                        Add EXPO_PUBLIC_RECAPTCHA_SITE_KEY to enable
+                        verification.
+                      </Text>
+                    )}
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      if (RECAPTCHA_BASE_URL_MISCONFIGURED) {
+                        setCaptchaError(
+                          `Invalid reCAPTCHA base URL. Set EXPO_PUBLIC_RECAPTCHA_BASE_URL to an HTTPS domain and whitelist ${RECAPTCHA_WHITELIST_DOMAIN} in Google reCAPTCHA settings.`,
+                        );
+                        return;
+                      }
+                      setRecaptchaLoading(true);
+                      setShowRecaptchaModal(true);
+                      setCaptchaError("");
+                    }}
+                    style={styles.recaptchaButton}
+                  >
+                    <View
+                      style={[
+                        styles.recaptchaCheckbox,
+                        isRecaptchaVerified && styles.checkboxChecked,
+                      ]}
+                    >
+                      {isRecaptchaVerified ? (
+                        <Text style={styles.checkboxMark}>✓</Text>
+                      ) : null}
+                    </View>
+                    <Text style={[styles.captchaLabel, { color: theme.text }]}>
+                      Verify you are a human
+                    </Text>
+                  </Pressable>
+                )}
+                {!RECAPTCHA_CONFIGURED ? (
+                  <Text style={styles.recaptchaHintText}>
+                    Set EXPO_PUBLIC_RECAPTCHA_SITE_KEY in .env to enable this
+                    action.
+                  </Text>
+                ) : Platform.OS !== "web" &&
+                  RECAPTCHA_BASE_URL_MISCONFIGURED ? (
+                  <Text style={styles.recaptchaHintText}>
+                    Set EXPO_PUBLIC_RECAPTCHA_BASE_URL to an HTTPS domain and
+                    whitelist {RECAPTCHA_WHITELIST_DOMAIN} in Google reCAPTCHA
+                    settings.
+                  </Text>
+                ) : null}
+                {captchaError ? (
+                  <Text style={styles.errorText}>{captchaError}</Text>
+                ) : null}
               </View>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    marginBottom: 0,
-                    backgroundColor:
-                      theme.name === "dark"
-                        ? "rgba(17, 24, 39, 0.85)"
-                        : "rgba(255, 255, 255, 0.95)",
-                    borderColor:
-                      theme.name === "dark"
-                        ? "rgba(255, 255, 255, 0.14)"
-                        : "rgba(15, 23, 42, 0.1)",
-                    color: theme.name === "dark" ? "#f9fafb" : "#111827",
-                  },
-                ]}
-                placeholderTextColor={
-                  theme.name === "dark" ? "#cbd5e1" : "#6b7280"
-                }
-                placeholder="Enter the characters shown"
-                value={captchaInput}
-                onChangeText={(value) => {
-                  setCaptchaInput(
-                    value.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
-                  );
-                  if (captchaError) {
-                    setCaptchaError("");
-                  }
-                }}
-                autoCapitalize="characters"
-              />
-              {captchaError ? (
-                <Text style={styles.errorText}>{captchaError}</Text>
-              ) : null}
-            </View>
+            ) : null}
 
             <Pressable
               style={({ pressed }) => [
@@ -684,6 +769,77 @@ export default function SignUp() {
           </Pressable>
         </View>
       </ScrollView>
+      <Modal
+        visible={showRecaptchaModal && Platform.OS !== "web"}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowRecaptchaModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.recaptchaModalCard}>
+            <Text style={styles.recaptchaModalTitle}>Complete reCAPTCHA</Text>
+            <View style={styles.webviewWrap}>
+              <WebView
+                originWhitelist={["*"]}
+                javaScriptEnabled
+                domStorageEnabled
+                source={{
+                  html: createRecaptchaHtml(RECAPTCHA_SITE_KEY),
+                  baseUrl: RECAPTCHA_BASE_URL,
+                }}
+                onLoadEnd={() => setRecaptchaLoading(false)}
+                onMessage={(event) => {
+                  try {
+                    const payload = JSON.parse(event.nativeEvent.data || "{}");
+                    if (payload.type === "verified" && payload.token) {
+                      setRecaptchaToken(payload.token);
+                      setIsRecaptchaVerified(true);
+                      setShowRecaptchaModal(false);
+                      setCaptchaError("");
+                      return;
+                    }
+                    if (payload.type === "expired") {
+                      setRecaptchaToken("");
+                      setIsRecaptchaVerified(false);
+                      setCaptchaError(
+                        "reCAPTCHA expired. Please verify again.",
+                      );
+                      return;
+                    }
+                    if (payload.type === "error") {
+                      setRecaptchaToken("");
+                      setIsRecaptchaVerified(false);
+                      setCaptchaError("reCAPTCHA failed. Please try again.");
+                    }
+                  } catch {
+                    setRecaptchaToken("");
+                    setIsRecaptchaVerified(false);
+                    setCaptchaError("Unable to process reCAPTCHA result.");
+                  }
+                }}
+              />
+              {recaptchaLoading ? (
+                <View style={styles.loadingOverlay}>
+                  <ActivityIndicator size="small" color="#2563eb" />
+                </View>
+              ) : null}
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.modalCloseButton,
+                pressed && styles.primaryButtonPressed,
+              ]}
+              onPress={() => {
+                setShowRecaptchaModal(false);
+                setRecaptchaLoading(true);
+              }}
+            >
+              <Text style={styles.primaryButtonText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={showTermsModal}
         animationType="slide"
@@ -861,38 +1017,53 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   captchaLabel: {
     fontSize: 12,
     fontWeight: "600",
   },
-  captchaImageFrame: {
-    backgroundColor: "#ffffff",
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 8,
+  recaptchaWidgetWrap: {
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 8,
   },
-  captchaCanvas: {
-    width: 220,
-    height: 84,
-    backgroundColor: "#fef3c7",
-    borderRadius: 6,
-    overflow: "hidden",
-    position: "relative",
+  recaptchaButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: "#e2e8f0",
   },
-  captchaCharacter: {
-    position: "absolute",
-    fontWeight: "700",
-    letterSpacing: 1,
-  },
-  captchaLine: {
-    position: "absolute",
-    height: 1,
-    borderTopWidth: 1,
+  recaptchaCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
     borderColor: "#94a3b8",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    marginRight: 8,
+  },
+  recaptchaHintText: {
+    color: "#64748b",
+    fontSize: 12,
+    marginTop: 6,
+  },
+  webviewWrap: {
+    flex: 1,
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.75)",
   },
   primaryButton: {
     marginTop: 8,
@@ -935,10 +1106,25 @@ const styles = StyleSheet.create({
     padding: 16,
     maxHeight: "80%",
   },
+  recaptchaModalCard: {
+    width: "100%",
+    maxWidth: 420,
+    height: 360,
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    padding: 12,
+  },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 12,
+  },
+  recaptchaModalTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 10,
+    textAlign: "center",
   },
   modalBody: {
     marginBottom: 12,
