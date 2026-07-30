@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { clearAuthSession, getAuthSession } from "../../lib/storage";
+import { StyleSheet, Text, View } from "react-native";
+import { getAuthSession } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
 
 export default function DashboardHomeTab() {
@@ -44,7 +44,6 @@ export default function DashboardHomeTab() {
           You are signed in.
         </Text>
       </View>
-
     </View>
   );
 }
@@ -54,14 +53,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-start",
     alignItems: "flex-start",
-    padding: 24,
-    paddingTop: 88,
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 24,
     position: "relative",
   },
   textContainer: {
     flex: 1,
     alignItems: "flex-start",
     width: "100%",
+    backgroundColor: "transparent",
   },
   title: {
     fontSize: 28,

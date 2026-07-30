@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     alignItems: "flex-start",
     padding: 24,
-    paddingTop: 88,
+    paddingTop: 60,
     position: "relative",
   },
   title: {
