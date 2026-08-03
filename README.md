@@ -28,6 +28,12 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
+## Supabase Storage setup for avatars
+
+Profile avatars are uploaded to a Supabase Storage bucket named `avatars`.
+
+Follow the steps in [docs/supabase-storage-setup.md](docs/supabase-storage-setup.md) to create the bucket and enable the required policies.
+
 ## Supabase password reset setup
 
 To make **Forgot password** work correctly:

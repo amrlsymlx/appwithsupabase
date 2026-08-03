@@ -123,9 +123,19 @@ export default function Index() {
           const signedInUsername =
             userMetadata?.username || normalizedEmail.split("@")[0] || "N/A";
           const signedInRole = userMetadata?.role || "user";
-          const signedInAvatarUri = userMetadata?.avatarUri || null;
+          const signedInAvatarPath = userMetadata?.avatarPath || null;
           const signedInAvatarLibraryKey =
             userMetadata?.avatarLibraryKey || null;
+
+          // Prefer predefined avatar selections over uploaded avatar paths
+          let signedInAvatarUri: string | null = null;
+          if (!signedInAvatarLibraryKey && signedInAvatarPath && supabase) {
+            const { data: signedUrlData } = await supabase.storage
+              .from("avatars")
+              .createSignedUrl(signedInAvatarPath, 3600);
+            signedInAvatarUri = signedUrlData?.signedUrl || null;
+          }
+
           await setAuthSession(
             {
               email: normalizedEmail,
@@ -135,6 +145,7 @@ export default function Index() {
               username: signedInUsername,
               role: signedInRole,
               avatarUri: signedInAvatarUri,
+              avatarPath: signedInAvatarPath,
               avatarLibraryKey: signedInAvatarLibraryKey,
             },
             keepSignedIn,

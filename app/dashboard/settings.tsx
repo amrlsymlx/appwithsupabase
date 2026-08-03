@@ -44,9 +44,9 @@ export default function SettingsTab() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
-      <Text style={[styles.message, { color: theme.secondaryText }]}>
+      {/* <Text style={[styles.message, { color: theme.secondaryText }]}>
         Settings tab is ready.
-      </Text>
+      </Text> */}
 
       <View style={styles.actionsRow}>
         <Pressable

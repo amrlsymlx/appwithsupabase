@@ -94,6 +94,7 @@ export async function setAuthSession(
     username?: string | null;
     role?: string | null;
     avatarUri?: string | null;
+    avatarPath?: string | null;
     avatarLibraryKey?: string | null;
   },
   keepSignedIn = false,
@@ -109,6 +110,7 @@ export async function setAuthSession(
       username: user.username ?? null,
       role: user.role ?? null,
       avatarUri: user.avatarUri ?? null,
+      avatarPath: user.avatarPath ?? null,
       avatarLibraryKey: user.avatarLibraryKey ?? null,
       rememberMe: keepSignedIn,
     }),
@@ -124,6 +126,7 @@ export async function updateAuthSession(
     username: string | null;
     role: string | null;
     avatarUri: string | null;
+    avatarPath: string | null;
     avatarLibraryKey: string | null;
   }>,
 ) {
@@ -142,6 +145,7 @@ export async function updateAuthSession(
       username: updates.username ?? session.username ?? null,
       role: updates.role ?? session.role ?? null,
       avatarUri: updates.avatarUri ?? session.avatarUri ?? null,
+      avatarPath: updates.avatarPath ?? session.avatarPath ?? null,
       avatarLibraryKey:
         updates.avatarLibraryKey ?? session.avatarLibraryKey ?? null,
     },

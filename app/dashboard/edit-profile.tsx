@@ -1,56 +1,61 @@
-import Avatar from "boring-avatars";
+import { bottts } from "@dicebear/collection";
+import { createAvatar } from "@dicebear/core";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { decode as decodeBase64 } from "base64-arraybuffer";
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import {
-    Alert,
-    Image,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  Alert,
+  Image,
+  InteractionManager,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { SvgXml } from "react-native-svg";
 import { getAuthSession, updateAuthSession } from "../../lib/storage";
 import { SUPABASE_CONFIGURED, supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme";
 
-const AVATAR_VARIANTS = [
-  "marble",
-  "beam",
-  "pixel",
-  "sunset",
-  "ring",
-  "bauhaus",
-] as const;
-
-const AVATAR_COLOR_PALETTES = [
-  ["#A3A3A3", "#F59E0B", "#F43F5E", "#0EA5E9", "#22C55E"],
-  ["#5B8C5A", "#F2C14E", "#F78154", "#4D9078", "#B4436C"],
-  ["#0F172A", "#334155", "#64748B", "#94A3B8", "#E2E8F0"],
-  ["#0F766E", "#14B8A6", "#5EEAD4", "#99F6E4", "#CCFBF1"],
-] as const;
-
 const AVATAR_LIBRARY_OPTIONS = [
-  { key: "beam:0:warm", label: "Warm" },
-  { key: "marble:1:forest", label: "Forest" },
-  { key: "ring:2:slate", label: "Slate" },
-  { key: "sunset:3:mint", label: "Mint" },
-  { key: "pixel:0:poppy", label: "Poppy" },
-  { key: "bauhaus:1:earth", label: "Earth" },
+  { key: "pixelbot:scout", label: "Scout" },
+  { key: "pixelbot:nova", label: "Nova" },
+  { key: "pixelbot:blaze", label: "Blaze" },
+  { key: "pixelbot:echo", label: "Echo" },
+  { key: "pixelbot:orbit", label: "Orbit" },
+  { key: "pixelbot:glitch", label: "Glitch" },
 ] as const;
 
-type AvatarVariant = (typeof AVATAR_VARIANTS)[number];
+type PendingAvatarAction = "gallery" | "camera" | null;
 
-const hashString = (value: string) => {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(index);
-    hash |= 0;
-  }
-  return Math.abs(hash);
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const promptOpenSettings = (permissionName: "Camera" | "Photo Library") => {
+  Alert.alert(
+    `${permissionName} permission is off`,
+    `Enable ${permissionName.toLowerCase()} access in iOS Settings to continue.`,
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Open Settings",
+        onPress: () => {
+          Linking.openSettings();
+        },
+      },
+    ],
+  );
 };
 
 export default function EditProfileScreen() {
@@ -63,115 +68,121 @@ export default function EditProfileScreen() {
   const [address, setAddress] = useState("");
   const [username, setUsername] = useState("");
   const [role, setRole] = useState("");
+  const [initialFullName, setInitialFullName] = useState("");
+  const [draftFullName, setDraftFullName] = useState("");
+  const [isEditingFullName, setIsEditingFullName] = useState(false);
+  const [savingFullName, setSavingFullName] = useState(false);
+  const [initialPhoneNumber, setInitialPhoneNumber] = useState("");
+  const [draftPhoneNumber, setDraftPhoneNumber] = useState("");
+  const [isEditingPhoneNumber, setIsEditingPhoneNumber] = useState(false);
+  const [savingPhoneNumber, setSavingPhoneNumber] = useState(false);
+  const [initialAddress, setInitialAddress] = useState("");
+  const [draftAddress, setDraftAddress] = useState("");
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [avatarLibraryKey, setAvatarLibraryKey] = useState<string | null>(null);
   const [updatingAvatar, setUpdatingAvatar] = useState(false);
+  const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+  const [showAvatarLibraryPicker, setShowAvatarLibraryPicker] = useState(false);
+  const [pendingAvatarAction, setPendingAvatarAction] =
+    useState<PendingAvatarAction>(null);
+  const [pendingLibraryKey, setPendingLibraryKey] = useState<string | null>(
+    null,
+  );
 
   const handleBackToSettings = () => {
     router.replace("/dashboard/settings");
   };
 
-  const defaultAvatarSeed = useMemo(() => {
-    return `${username}|${email}|${fullName}`;
-  }, [email, fullName, username]);
-
-  const buildAvatarSvg = (
-    seed: string,
-    variant: AvatarVariant,
-    colors: readonly string[],
-  ) => {
-    return renderToStaticMarkup(
-      <Avatar
-        size={120}
-        square={false}
-        name={seed || "Anonymous"}
-        variant={variant}
-        colors={[...colors]}
-      />,
-    );
-  };
-
   const parseLibraryKey = (key: string) => {
-    const [variantRaw, paletteRaw, suffixRaw] = key.split(":");
-    const variant = AVATAR_VARIANTS.includes(variantRaw as AvatarVariant)
-      ? (variantRaw as AvatarVariant)
-      : "marble";
-    const paletteIndex = Number.parseInt(paletteRaw ?? "0", 10);
-    const normalizedPaletteIndex = Number.isFinite(paletteIndex)
-      ? Math.max(0, Math.min(AVATAR_COLOR_PALETTES.length - 1, paletteIndex))
-      : 0;
-    const suffix = suffixRaw || "default";
-
-    return { variant, paletteIndex: normalizedPaletteIndex, suffix };
+    const [, suffixRaw] = key.split(":");
+    return suffixRaw || "default";
   };
 
-  const defaultAvatarVariant = useMemo(() => {
-    const variantIndex = hashString(defaultAvatarSeed) % AVATAR_VARIANTS.length;
-    return AVATAR_VARIANTS[variantIndex];
-  }, [defaultAvatarSeed]);
-
-  const defaultAvatarColors = useMemo(() => {
-    const colorIndex =
-      hashString(`${defaultAvatarSeed}-colors`) % AVATAR_COLOR_PALETTES.length;
-    return AVATAR_COLOR_PALETTES[colorIndex];
-  }, [defaultAvatarSeed]);
-
-  const defaultAvatarSvg = useMemo(() => {
-    return buildAvatarSvg(
-      defaultAvatarSeed,
-      defaultAvatarVariant,
-      defaultAvatarColors,
-    );
-  }, [defaultAvatarColors, defaultAvatarSeed, defaultAvatarVariant]);
-
-  const selectedLibraryAvatarSvg = useMemo(() => {
-    if (!avatarLibraryKey) {
-      return null;
+  const activeAvatarSeed = useMemo(() => {
+    if (avatarLibraryKey) {
+      return `${email || "anonymous"}|${parseLibraryKey(avatarLibraryKey)}`;
     }
+    return email || "anonymous";
+  }, [avatarLibraryKey, email]);
 
-    const parsed = parseLibraryKey(avatarLibraryKey);
-    return buildAvatarSvg(
-      `${defaultAvatarSeed}|${parsed.suffix}`,
-      parsed.variant,
-      AVATAR_COLOR_PALETTES[parsed.paletteIndex],
-    );
-  }, [avatarLibraryKey, defaultAvatarSeed]);
+  const buildAvatarSvg = (seed: string, size: number) => {
+    return createAvatar(bottts, { seed, size }).toString();
+  };
 
-  const activeSvgAvatar = selectedLibraryAvatarSvg || defaultAvatarSvg;
-
-  const libraryPreviewItems = useMemo(() => {
-    return AVATAR_LIBRARY_OPTIONS.map((option) => {
-      const parsed = parseLibraryKey(option.key);
-      const xml = buildAvatarSvg(
-        `${defaultAvatarSeed}|${parsed.suffix}`,
-        parsed.variant,
-        AVATAR_COLOR_PALETTES[parsed.paletteIndex],
-      );
-
-      return {
-        ...option,
-        xml,
-      };
-    });
-  }, [defaultAvatarSeed]);
+  const avatarSvg = useMemo(
+    () => buildAvatarSvg(activeAvatarSeed, 120),
+    [activeAvatarSeed],
+  );
 
   const saveAvatarUri = async (nextUri: string) => {
     setUpdatingAvatar(true);
     try {
-      setAvatarUri(nextUri);
+      if (!SUPABASE_CONFIGURED || !supabase) {
+        setAvatarUri(nextUri);
+        setAvatarLibraryKey(null);
+        await updateAuthSession({
+          avatarUri: nextUri,
+          avatarPath: null,
+          avatarLibraryKey: null,
+        });
+        return;
+      }
+
+      const session = await supabase.auth.getSession();
+      const userId = session.data.session?.user?.id;
+      if (!userId) {
+        throw new Error("No authenticated user found.");
+      }
+
+      const fileName = `${userId}/avatar-${Date.now()}.jpg`;
+      const base64 = await FileSystem.readAsStringAsync(nextUri, {
+        encoding: "base64",
+      });
+      const fileBytes = new Uint8Array(decodeBase64(base64));
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(fileName, fileBytes, {
+          contentType: "image/jpeg",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw new Error(
+          `Unable to upload avatar to Supabase Storage. Make sure the avatars bucket exists and RLS policies are configured. ${uploadError.message}`,
+        );
+      }
+
+      const { data: signedUrlData, error: signedUrlError } =
+        await supabase.storage.from("avatars").createSignedUrl(fileName, 3600);
+      if (signedUrlError) {
+        console.warn(
+          "Unable to generate signed URL for avatar",
+          signedUrlError,
+        );
+      }
+
+      const remoteAvatarUrl = signedUrlData?.signedUrl || nextUri;
+
+      setAvatarUri(remoteAvatarUrl);
       setAvatarLibraryKey(null);
       await updateAuthSession({
-        avatarUri: nextUri,
+        avatarUri: remoteAvatarUrl,
+        avatarPath: fileName,
         avatarLibraryKey: null,
       });
 
-      if (SUPABASE_CONFIGURED && supabase) {
-        await supabase.auth.updateUser({
-          data: {
-            avatarUri: nextUri,
-            avatarLibraryKey: null,
-          },
-        } as any);
+      // Store only the file path in metadata — fresh signed URLs are generated on sign-in
+      const { error: updateUserError } = await supabase.auth.updateUser({
+        data: {
+          avatarPath: fileName,
+          avatarLibraryKey: null,
+        },
+      } as any);
+      if (updateUserError) {
+        throw new Error(updateUserError.message);
       }
     } catch (error: any) {
       Alert.alert("Avatar update failed", error?.message || "Try again.");
@@ -187,68 +198,263 @@ export default function EditProfileScreen() {
       setAvatarLibraryKey(nextLibraryKey);
       await updateAuthSession({
         avatarUri: null,
+        avatarPath: null,
         avatarLibraryKey: nextLibraryKey,
       });
 
       if (SUPABASE_CONFIGURED && supabase) {
-        await supabase.auth.updateUser({
+        const { error: updateUserError } = await supabase.auth.updateUser({
           data: {
-            avatarUri: null,
+            avatarPath: null,
             avatarLibraryKey: nextLibraryKey,
           },
         } as any);
+        if (updateUserError) {
+          throw new Error(updateUserError.message);
+        }
       }
     } catch (error: any) {
       Alert.alert("Avatar update failed", error?.message || "Try again.");
     } finally {
       setUpdatingAvatar(false);
+      setPendingLibraryKey(null);
+      setShowAvatarLibraryPicker(false);
+      setShowAvatarMenu(false);
     }
   };
 
-  const handleChooseFromDevice = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        "Permission required",
-        "Please allow photo library access to choose an avatar.",
-      );
+  const handleSaveFullName = async () => {
+    const trimmedName = draftFullName.trim();
+    const originalName = initialFullName.trim();
+
+    if (!trimmedName) {
+      Alert.alert("Name required", "Please enter your full name.");
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]?.uri) {
-      await saveAvatarUri(result.assets[0].uri);
-    }
-  };
-
-  const handleTakePicture = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        "Permission required",
-        "Please allow camera access to take an avatar photo.",
-      );
+    if (trimmedName === originalName) {
       return;
     }
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-      cameraType: ImagePicker.CameraType.front,
-    });
+    setSavingFullName(true);
+    try {
+      await updateAuthSession({ name: trimmedName });
 
-    if (!result.canceled && result.assets[0]?.uri) {
-      await saveAvatarUri(result.assets[0].uri);
+      if (SUPABASE_CONFIGURED && supabase) {
+        const { error: updateUserError } = await supabase.auth.updateUser({
+          data: {
+            name: trimmedName,
+            full_name: trimmedName,
+          },
+        } as any);
+
+        if (updateUserError) {
+          throw new Error(updateUserError.message);
+        }
+      }
+
+      setFullName(trimmedName);
+      setDraftFullName(trimmedName);
+      setInitialFullName(trimmedName);
+      setIsEditingFullName(false);
+      Alert.alert("Saved", "Full Name updated.");
+    } catch (error: any) {
+      Alert.alert("Update failed", error?.message || "Try again.");
+    } finally {
+      setSavingFullName(false);
     }
   };
+
+  const handleSavePhoneNumber = async () => {
+    const trimmedPhoneNumber = draftPhoneNumber.trim();
+    const originalPhoneNumber = initialPhoneNumber.trim();
+
+    if (trimmedPhoneNumber === originalPhoneNumber) {
+      setIsEditingPhoneNumber(false);
+      return;
+    }
+
+    setSavingPhoneNumber(true);
+    try {
+      await updateAuthSession({ phoneNumber: trimmedPhoneNumber || null });
+
+      if (SUPABASE_CONFIGURED && supabase) {
+        const { error: updateUserError } = await supabase.auth.updateUser({
+          data: {
+            phoneNumber: trimmedPhoneNumber || null,
+            phone_number: trimmedPhoneNumber || null,
+          },
+        } as any);
+
+        if (updateUserError) {
+          throw new Error(updateUserError.message);
+        }
+      }
+
+      const nextPhoneNumber = trimmedPhoneNumber || "N/A";
+      setPhoneNumber(nextPhoneNumber);
+      setDraftPhoneNumber(nextPhoneNumber);
+      setInitialPhoneNumber(nextPhoneNumber);
+      setIsEditingPhoneNumber(false);
+      Alert.alert("Saved", "Phone Number updated.");
+    } catch (error: any) {
+      Alert.alert("Update failed", error?.message || "Try again.");
+    } finally {
+      setSavingPhoneNumber(false);
+    }
+  };
+
+  const handleSaveAddress = async () => {
+    const trimmedAddress = draftAddress.trim();
+    const originalAddress = initialAddress.trim();
+
+    if (trimmedAddress === originalAddress) {
+      setIsEditingAddress(false);
+      return;
+    }
+
+    setSavingAddress(true);
+    try {
+      await updateAuthSession({ address: trimmedAddress || null });
+
+      if (SUPABASE_CONFIGURED && supabase) {
+        const { error: updateUserError } = await supabase.auth.updateUser({
+          data: {
+            address: trimmedAddress || null,
+          },
+        } as any);
+
+        if (updateUserError) {
+          throw new Error(updateUserError.message);
+        }
+      }
+
+      const nextAddress = trimmedAddress || "N/A";
+      setAddress(nextAddress);
+      setDraftAddress(nextAddress);
+      setInitialAddress(nextAddress);
+      setIsEditingAddress(false);
+      Alert.alert("Saved", "Address updated.");
+    } catch (error: any) {
+      Alert.alert("Update failed", error?.message || "Try again.");
+    } finally {
+      setSavingAddress(false);
+    }
+  };
+
+  const launchGalleryPicker = async () => {
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        if (!permission.canAskAgain) {
+          promptOpenSettings("Photo Library");
+          return;
+        }
+        Alert.alert(
+          "Permission required",
+          "Please allow photo library access to choose an avatar.",
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      const nextUri = result.assets?.[0]?.uri;
+      if (!result.canceled && nextUri) {
+        await saveAvatarUri(nextUri);
+      }
+    } catch (error: any) {
+      Alert.alert("Avatar update failed", error?.message || "Try again.");
+    }
+  };
+
+  const launchCameraPicker = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        if (!permission.canAskAgain) {
+          promptOpenSettings("Camera");
+          return;
+        }
+        Alert.alert(
+          "Permission required",
+          "Please allow camera access to take an avatar photo.",
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        cameraType: ImagePicker.CameraType.front,
+      });
+
+      const nextUri = result.assets?.[0]?.uri;
+      if (!result.canceled && nextUri) {
+        await saveAvatarUri(nextUri);
+      }
+    } catch (error: any) {
+      Alert.alert("Avatar update failed", error?.message || "Try again.");
+    }
+  };
+
+  const queueNativeAvatarAction = (
+    action: Exclude<PendingAvatarAction, null>,
+  ) => {
+    if (updatingAvatar) {
+      return;
+    }
+    setPendingAvatarAction(action);
+    setShowAvatarMenu(false);
+  };
+
+  const waitForPickerLaunchWindow = () =>
+    new Promise<void>((resolve) => {
+      InteractionManager.runAfterInteractions(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+
+  useEffect(() => {
+    const runPendingAction = async () => {
+      if (showAvatarMenu || !pendingAvatarAction) {
+        return;
+      }
+
+      try {
+        await waitForPickerLaunchWindow();
+        if (Platform.OS === "ios") {
+          await wait(10);
+        }
+
+        if (pendingAvatarAction === "gallery") {
+          await launchGalleryPicker();
+        }
+        if (pendingAvatarAction === "camera") {
+          await launchCameraPicker();
+        }
+      } finally {
+        setPendingAvatarAction(null);
+      }
+    };
+
+    runPendingAction();
+  }, [pendingAvatarAction, showAvatarMenu]);
+
+  useEffect(() => {
+    // Warm permission checks on iOS so first picker launch feels less delayed.
+    if (Platform.OS !== "ios") {
+      return;
+    }
+    ImagePicker.getMediaLibraryPermissionsAsync().catch(() => {});
+    ImagePicker.getCameraPermissionsAsync().catch(() => {});
+  }, []);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -258,14 +464,87 @@ export default function EditProfileScreen() {
         return;
       }
 
-      setFullName(session.name || "-");
-      setEmail(session.email || "-");
-      setPhoneNumber(session.phoneNumber || "N/A");
-      setAddress(session.address || "N/A");
-      setUsername(session.username || "N/A");
-      setRole(session.role || "user");
-      setAvatarUri(session.avatarUri || null);
-      setAvatarLibraryKey(session.avatarLibraryKey || null);
+      let nextName = session.name || "";
+      const nextEmail = session.email || "-";
+      let nextPhone = session.phoneNumber || "";
+      let nextAddress = session.address || "";
+      let nextUsername = session.username || "N/A";
+      let nextRole = session.role || "user";
+      let nextAvatarPath = session.avatarPath || null;
+      let nextAvatarLibraryKey = session.avatarLibraryKey || null;
+
+      setEmail(nextEmail);
+
+      // Fetch fresh metadata from Supabase to sync profile and avatar across devices.
+      let freshAvatarUri = session.avatarUri || null;
+      if (SUPABASE_CONFIGURED && supabase) {
+        const { data: userData } = await supabase.auth.getUser();
+        const meta = userData?.user?.user_metadata || {};
+        const metaName = meta.name || meta.full_name;
+        const metaPhone = meta.phoneNumber || meta.phone_number;
+        if (typeof metaName === "string") {
+          nextName = metaName;
+        }
+        if (typeof metaPhone === "string") {
+          nextPhone = metaPhone;
+        }
+        if (typeof meta.address === "string") {
+          nextAddress = meta.address;
+        }
+        if (typeof meta.username === "string") {
+          nextUsername = meta.username;
+        }
+        if (typeof meta.role === "string") {
+          nextRole = meta.role;
+        }
+
+        const avatarPath = meta.avatarPath || nextAvatarPath || null;
+        const avatarLibKey = meta.avatarLibraryKey || null;
+        if (avatarLibKey) {
+          nextAvatarLibraryKey = avatarLibKey;
+          nextAvatarPath = null;
+          freshAvatarUri = null;
+        } else if (avatarPath) {
+          const { data: signedUrlData } = await supabase.storage
+            .from("avatars")
+            .createSignedUrl(avatarPath, 3600);
+          freshAvatarUri = signedUrlData?.signedUrl || null;
+          nextAvatarLibraryKey = null;
+          nextAvatarPath = avatarPath;
+        } else {
+          nextAvatarLibraryKey = null;
+          nextAvatarPath = null;
+          freshAvatarUri = null;
+        }
+
+        await updateAuthSession({
+          name: nextName || null,
+          phoneNumber: nextPhone || null,
+          address: nextAddress || null,
+          username: nextUsername || null,
+          role: nextRole || null,
+          avatarUri: freshAvatarUri,
+          avatarPath: nextAvatarPath,
+          avatarLibraryKey: nextAvatarLibraryKey,
+        });
+      }
+
+      const displayPhone = nextPhone.trim() ? nextPhone : "N/A";
+      const displayAddress = nextAddress.trim() ? nextAddress : "N/A";
+
+      setFullName(nextName);
+      setDraftFullName(nextName);
+      setInitialFullName(nextName);
+      setPhoneNumber(displayPhone);
+      setDraftPhoneNumber(displayPhone);
+      setInitialPhoneNumber(displayPhone);
+      setAddress(displayAddress);
+      setDraftAddress(displayAddress);
+      setInitialAddress(displayAddress);
+      setUsername(nextUsername || "N/A");
+      setRole(nextRole || "user");
+      setAvatarLibraryKey(nextAvatarLibraryKey);
+      setAvatarUri(freshAvatarUri);
 
       setReady(true);
     };
@@ -278,161 +557,702 @@ export default function EditProfileScreen() {
   }
 
   return (
-    <ScrollView
+    <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.background }]}
-      contentContainerStyle={styles.containerContent}
-      showsVerticalScrollIndicator={false}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
     >
-      <Pressable
-        style={({ pressed }) => [
-          styles.backButton,
-          pressed && styles.backButtonPressed,
-        ]}
-        onPress={handleBackToSettings}
-        hitSlop={10}
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.containerContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        automaticallyAdjustKeyboardInsets
       >
-        <Text style={styles.backButtonText}>Back to Settings</Text>
-      </Pressable>
-
-      <Text style={[styles.title, { color: theme.text }]}>Edit Profile</Text>
-      <Text style={[styles.message, { color: theme.secondaryText }]}>
-        Edit profile page is ready.
-      </Text>
-
-      <View style={[styles.avatarCard, { borderColor: theme.border }]}>
-        <View style={styles.avatarFrame}>
-          {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-          ) : (
-            <SvgXml xml={activeSvgAvatar} width="100%" height="100%" />
-          )}
-        </View>
-
-        <View style={styles.avatarActionsRow}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.avatarActionButton,
-              pressed && styles.avatarActionButtonPressed,
+        <Pressable
+          style={({ pressed }) => [
+            styles.backButton,
+            {
+              backgroundColor: theme.name === "dark" ? "#1f2937" : "#e5edff",
+              borderColor: theme.name === "dark" ? "#374151" : "#bfdbfe",
+            },
+            pressed && styles.backButtonPressed,
+          ]}
+          onPress={handleBackToSettings}
+          hitSlop={10}
+        >
+          <Text
+            style={[
+              styles.backButtonText,
+              { color: theme.name === "dark" ? "#f9fafb" : "#1e3a8a" },
             ]}
-            onPress={handleChooseFromDevice}
-            hitSlop={10}
-            disabled={updatingAvatar}
           >
-            <Text style={styles.avatarActionButtonText}>Upload Avatar</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.avatarActionButton,
-              pressed && styles.avatarActionButtonPressed,
-            ]}
-            onPress={handleTakePicture}
-            hitSlop={10}
-            disabled={updatingAvatar}
-          >
-            <Text style={styles.avatarActionButtonText}>Take Picture</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.avatarLibrarySection}>
-          <Text style={[styles.avatarLibraryTitle, { color: theme.text }]}>
-            Choose from avatar library
+            Back to Settings
           </Text>
-          <View style={styles.avatarLibraryGrid}>
-            {libraryPreviewItems.map((item) => {
-              const selected = avatarLibraryKey === item.key;
+        </Pressable>
 
-              return (
-                <Pressable
-                  key={item.key}
-                  style={[
-                    styles.avatarLibraryItem,
-                    selected && styles.avatarLibraryItemSelected,
-                  ]}
-                  onPress={() => handleSelectLibraryAvatar(item.key)}
-                  disabled={updatingAvatar}
-                >
-                  <View style={styles.avatarLibraryPreviewFrame}>
-                    <SvgXml xml={item.xml} width="100%" height="100%" />
-                  </View>
-                  <Text style={styles.avatarLibraryItemText}>{item.label}</Text>
-                </Pressable>
-              );
-            })}
+        <Text style={[styles.title, { color: theme.text }]}>Edit Profile</Text>
+        {/* <Text style={[styles.message, { color: theme.secondaryText }]}>
+          Edit profile page is ready.
+        </Text> */}
+
+        <View
+          style={[
+            styles.avatarCard,
+            {
+              borderColor: theme.border,
+              backgroundColor: theme.name === "dark" ? "#111827" : "#ffffff",
+            },
+          ]}
+        >
+          <View style={styles.avatarShell}>
+            <View style={styles.avatarFrame}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+              ) : (
+                <SvgXml xml={avatarSvg} width="100%" height="100%" />
+              )}
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.editIconButton,
+                {
+                  backgroundColor:
+                    theme.name === "dark" ? "#1f2937" : "#ffffff",
+                  borderColor: theme.name === "dark" ? "#374151" : "#cbd5e1",
+                },
+                pressed && styles.editIconButtonPressed,
+              ]}
+              onPress={() => setShowAvatarMenu(true)}
+              hitSlop={10}
+            >
+              <MaterialCommunityIcons
+                name="pencil"
+                size={16}
+                color={theme.name === "dark" ? "#f9fafb" : "#1e3a8a"}
+              />
+            </Pressable>
           </View>
         </View>
-      </View>
 
-      <View style={[styles.infoCard, { borderColor: theme.border }]}>
-        <Text style={[styles.fieldLabel, { color: theme.secondaryText }]}>
-          Full Name
-        </Text>
-        <Text style={[styles.fieldValue, { color: theme.text }]}>
-          {fullName}
-        </Text>
+        <Modal
+          visible={showAvatarMenu}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowAvatarMenu(false)}
+        >
+          <View style={styles.avatarMenuOverlay}>
+            <Pressable
+              style={styles.avatarMenuBackdrop}
+              onPress={() => setShowAvatarMenu(false)}
+            />
+            <View
+              style={[
+                styles.avatarMenu,
+                {
+                  backgroundColor:
+                    theme.name === "dark" ? "#111827" : "#ffffff",
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <Pressable
+                style={({ pressed }) => [
+                  styles.avatarMenuItem,
+                  pressed && styles.avatarMenuItemPressed,
+                ]}
+                onPress={() => queueNativeAvatarAction("gallery")}
+                disabled={updatingAvatar}
+              >
+                <Text
+                  style={[styles.avatarMenuItemText, { color: theme.text }]}
+                >
+                  Upload avatar
+                </Text>
+              </Pressable>
 
-        <Text
+              <Pressable
+                style={({ pressed }) => [
+                  styles.avatarMenuItem,
+                  pressed && styles.avatarMenuItemPressed,
+                ]}
+                onPress={() => queueNativeAvatarAction("camera")}
+                disabled={updatingAvatar}
+              >
+                <Text
+                  style={[styles.avatarMenuItemText, { color: theme.text }]}
+                >
+                  Take picture
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.avatarMenuItem,
+                  pressed && styles.avatarMenuItemPressed,
+                ]}
+                onPress={() => {
+                  setPendingLibraryKey(avatarLibraryKey);
+                  setShowAvatarMenu(false);
+                  setShowAvatarLibraryPicker(true);
+                }}
+                disabled={updatingAvatar}
+              >
+                <Text
+                  style={[styles.avatarMenuItemText, { color: theme.text }]}
+                >
+                  Choose avatar
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.avatarMenuItem,
+                  pressed && styles.avatarMenuItemPressed,
+                ]}
+                onPress={() => setShowAvatarMenu(false)}
+                disabled={updatingAvatar}
+              >
+                <Text style={[styles.avatarMenuItemText, { color: "#dc2626" }]}>
+                  Cancel
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={showAvatarLibraryPicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setPendingLibraryKey(null);
+            setShowAvatarLibraryPicker(false);
+          }}
+        >
+          <View style={styles.avatarMenuOverlay}>
+            <Pressable
+              style={styles.avatarMenuBackdrop}
+              onPress={() => {
+                setPendingLibraryKey(null);
+                setShowAvatarLibraryPicker(false);
+              }}
+            />
+            <View
+              style={[
+                styles.avatarLibraryPicker,
+                {
+                  backgroundColor:
+                    theme.name === "dark" ? "#111827" : "#ffffff",
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <Text
+                style={[styles.avatarLibraryPickerTitle, { color: theme.text }]}
+              >
+                Choose an avatar
+              </Text>
+              <View style={styles.avatarLibraryGrid}>
+                {AVATAR_LIBRARY_OPTIONS.map((item) => {
+                  const selected = pendingLibraryKey
+                    ? pendingLibraryKey === item.key
+                    : avatarLibraryKey === item.key;
+                  const seed = `${email || "anonymous"}|${parseLibraryKey(item.key)}`;
+
+                  return (
+                    <Pressable
+                      key={item.key}
+                      style={[
+                        styles.avatarLibraryItem,
+                        {
+                          backgroundColor:
+                            theme.name === "dark" ? "#111827" : "#f8fbff",
+                          borderColor:
+                            theme.name === "dark" ? "#374151" : "#bfdbfe",
+                        },
+                        selected && styles.avatarLibraryItemSelected,
+                        selected && {
+                          backgroundColor:
+                            theme.name === "dark" ? "#1f2937" : "#eff6ff",
+                          borderColor:
+                            theme.name === "dark" ? "#60a5fa" : "#2563eb",
+                        },
+                      ]}
+                      onPress={() => setPendingLibraryKey(item.key)}
+                      disabled={updatingAvatar}
+                    >
+                      <View style={styles.avatarLibraryPreviewFrame}>
+                        <SvgXml
+                          xml={buildAvatarSvg(seed, 56)}
+                          width="100%"
+                          height="100%"
+                        />
+                      </View>
+                      <Text
+                        style={[
+                          styles.avatarLibraryItemText,
+                          {
+                            color:
+                              theme.name === "dark" ? "#f9fafb" : "#1e3a8a",
+                          },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.confirmButton,
+                  pressed && styles.confirmButtonPressed,
+                  !pendingLibraryKey && styles.confirmButtonDisabled,
+                ]}
+                onPress={() => {
+                  if (pendingLibraryKey) {
+                    handleSelectLibraryAvatar(pendingLibraryKey);
+                  }
+                }}
+                disabled={updatingAvatar || !pendingLibraryKey}
+              >
+                <Text style={styles.confirmButtonText}>Confirm</Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  pressed && styles.cancelButtonPressed,
+                ]}
+                onPress={() => {
+                  setPendingLibraryKey(null);
+                  setShowAvatarLibraryPicker(false);
+                }}
+                disabled={updatingAvatar}
+              >
+                <Text style={[styles.cancelButtonText, { color: "#dc2626" }]}>
+                  Cancel
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        <View
           style={[
-            styles.fieldLabel,
-            styles.fieldLabelSpacing,
-            { color: theme.secondaryText },
+            styles.infoCard,
+            {
+              borderColor: theme.border,
+              backgroundColor: theme.name === "dark" ? "#111827" : "#ffffff",
+            },
           ]}
         >
-          Email
-        </Text>
-        <Text style={[styles.fieldValue, { color: theme.text }]}>{email}</Text>
+          <View style={styles.fullNameHeaderRow}>
+            <Text style={[styles.fieldLabel, { color: theme.secondaryText }]}>
+              Full Name
+            </Text>
+            {!isEditingFullName ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.editNameButton,
+                  {
+                    backgroundColor:
+                      theme.name === "dark" ? "#374151" : "#dbeafe",
+                    borderColor: theme.name === "dark" ? "#4b5563" : "#93c5fd",
+                  },
+                  pressed && styles.editNameButtonPressed,
+                ]}
+                onPress={() => {
+                  setDraftFullName(fullName);
+                  setIsEditingPhoneNumber(false);
+                  setIsEditingAddress(false);
+                  setIsEditingFullName(true);
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="pencil"
+                  size={14}
+                  color={theme.name === "dark" ? "#f9fafb" : "#1e3a8a"}
+                />
+              </Pressable>
+            ) : null}
+          </View>
 
-        <Text
-          style={[
-            styles.fieldLabel,
-            styles.fieldLabelSpacing,
-            { color: theme.secondaryText },
-          ]}
-        >
-          Phone Number
-        </Text>
-        <Text style={[styles.fieldValue, { color: theme.text }]}>
-          {phoneNumber}
-        </Text>
+          {isEditingFullName ? (
+            <>
+              <TextInput
+                style={[
+                  styles.fieldInput,
+                  {
+                    color: theme.text,
+                    borderColor: theme.border,
+                    backgroundColor:
+                      theme.name === "dark" ? "#0f172a" : "#f8fafc",
+                  },
+                ]}
+                placeholder="Enter your full name"
+                placeholderTextColor={theme.secondaryText}
+                value={draftFullName}
+                onChangeText={setDraftFullName}
+                editable={!savingFullName}
+                autoCapitalize="words"
+                returnKeyType="done"
+                onSubmitEditing={handleSaveFullName}
+              />
+              <View style={styles.fullNameActionRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.nameActionButton,
+                    {
+                      backgroundColor:
+                        savingFullName || draftFullName.trim().length === 0
+                          ? theme.name === "dark"
+                            ? "#1f2937"
+                            : "#bfdbfe"
+                          : "#2563eb",
+                      borderColor:
+                        savingFullName || draftFullName.trim().length === 0
+                          ? theme.name === "dark"
+                            ? "#374151"
+                            : "#93c5fd"
+                          : "#2563eb",
+                    },
+                    pressed &&
+                      !(savingFullName || draftFullName.trim().length === 0) &&
+                      styles.nameActionButtonPressed,
+                  ]}
+                  onPress={handleSaveFullName}
+                  disabled={savingFullName || draftFullName.trim().length === 0}
+                >
+                  <Text
+                    style={[
+                      styles.nameActionButtonText,
+                      {
+                        color:
+                          savingFullName || draftFullName.trim().length === 0
+                            ? theme.name === "dark"
+                              ? "#9ca3af"
+                              : "#475569"
+                            : "#ffffff",
+                      },
+                    ]}
+                  >
+                    {savingFullName ? "Saving..." : "Confirm"}
+                  </Text>
+                </Pressable>
 
-        <Text
-          style={[
-            styles.fieldLabel,
-            styles.fieldLabelSpacing,
-            { color: theme.secondaryText },
-          ]}
-        >
-          Address
-        </Text>
-        <Text style={[styles.fieldValue, { color: theme.text }]}>
-          {address}
-        </Text>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.nameActionButton,
+                    {
+                      backgroundColor:
+                        theme.name === "dark" ? "#1f2937" : "#e2e8f0",
+                      borderColor:
+                        theme.name === "dark" ? "#374151" : "#cbd5e1",
+                    },
+                    pressed && styles.nameActionButtonPressed,
+                  ]}
+                  onPress={() => {
+                    setDraftFullName(fullName);
+                    setIsEditingFullName(false);
+                  }}
+                  disabled={savingFullName}
+                >
+                  <Text
+                    style={[
+                      styles.nameActionButtonText,
+                      { color: theme.name === "dark" ? "#f3f4f6" : "#0f172a" },
+                    ]}
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <Text style={[styles.fieldValue, { color: theme.text }]}>
+              {fullName || "-"}
+            </Text>
+          )}
 
-        <Text
-          style={[
-            styles.fieldLabel,
-            styles.fieldLabelSpacing,
-            { color: theme.secondaryText },
-          ]}
-        >
-          Username
-        </Text>
-        <Text style={[styles.fieldValue, { color: theme.text }]}>
-          {username}
-        </Text>
+          <Text
+            style={[
+              styles.fieldLabel,
+              styles.fieldLabelSpacing,
+              { color: theme.secondaryText },
+            ]}
+          >
+            Email
+          </Text>
+          <Text style={[styles.fieldValue, { color: theme.text }]}>
+            {email}
+          </Text>
 
-        <Text
-          style={[
-            styles.fieldLabel,
-            styles.fieldLabelSpacing,
-            { color: theme.secondaryText },
-          ]}
-        >
-          Role
-        </Text>
-        <Text style={[styles.fieldValue, { color: theme.text }]}>{role}</Text>
-      </View>
-    </ScrollView>
+          <View style={[styles.fullNameHeaderRow, styles.fieldLabelSpacing]}>
+            <Text style={[styles.fieldLabel, { color: theme.secondaryText }]}>
+              Phone Number
+            </Text>
+            {!isEditingPhoneNumber ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.editNameButton,
+                  {
+                    backgroundColor:
+                      theme.name === "dark" ? "#374151" : "#dbeafe",
+                    borderColor: theme.name === "dark" ? "#4b5563" : "#93c5fd",
+                  },
+                  pressed && styles.editNameButtonPressed,
+                ]}
+                onPress={() => {
+                  setDraftPhoneNumber(phoneNumber === "N/A" ? "" : phoneNumber);
+                  setIsEditingFullName(false);
+                  setIsEditingAddress(false);
+                  setIsEditingPhoneNumber(true);
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="pencil"
+                  size={14}
+                  color={theme.name === "dark" ? "#f9fafb" : "#1e3a8a"}
+                />
+              </Pressable>
+            ) : null}
+          </View>
+
+          {isEditingPhoneNumber ? (
+            <>
+              <TextInput
+                style={[
+                  styles.fieldInput,
+                  {
+                    color: theme.text,
+                    borderColor: theme.border,
+                    backgroundColor:
+                      theme.name === "dark" ? "#0f172a" : "#f8fafc",
+                  },
+                ]}
+                placeholder="Enter your phone number"
+                placeholderTextColor={theme.secondaryText}
+                value={draftPhoneNumber}
+                onChangeText={setDraftPhoneNumber}
+                editable={!savingPhoneNumber}
+                keyboardType="phone-pad"
+                returnKeyType="done"
+                onSubmitEditing={handleSavePhoneNumber}
+              />
+              <View style={styles.fullNameActionRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.nameActionButton,
+                    {
+                      backgroundColor: savingPhoneNumber
+                        ? "#93c5fd"
+                        : "#2563eb",
+                      borderColor: savingPhoneNumber ? "#93c5fd" : "#2563eb",
+                    },
+                    pressed &&
+                      !savingPhoneNumber &&
+                      styles.nameActionButtonPressed,
+                  ]}
+                  onPress={handleSavePhoneNumber}
+                  disabled={savingPhoneNumber}
+                >
+                  <Text
+                    style={[
+                      styles.nameActionButtonText,
+                      {
+                        color: savingPhoneNumber
+                          ? theme.name === "dark"
+                            ? "#9ca3af"
+                            : "#475569"
+                          : "#ffffff",
+                      },
+                    ]}
+                  >
+                    {savingPhoneNumber ? "Saving..." : "Confirm"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.nameActionButton,
+                    {
+                      backgroundColor:
+                        theme.name === "dark" ? "#1f2937" : "#e2e8f0",
+                      borderColor:
+                        theme.name === "dark" ? "#374151" : "#cbd5e1",
+                    },
+                    pressed && styles.nameActionButtonPressed,
+                  ]}
+                  onPress={() => {
+                    setDraftPhoneNumber(
+                      phoneNumber === "N/A" ? "" : phoneNumber,
+                    );
+                    setIsEditingPhoneNumber(false);
+                  }}
+                  disabled={savingPhoneNumber}
+                >
+                  <Text
+                    style={[
+                      styles.nameActionButtonText,
+                      { color: theme.name === "dark" ? "#f3f4f6" : "#0f172a" },
+                    ]}
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <Text style={[styles.fieldValue, { color: theme.text }]}>
+              {phoneNumber || "N/A"}
+            </Text>
+          )}
+
+          <View style={[styles.fullNameHeaderRow, styles.fieldLabelSpacing]}>
+            <Text style={[styles.fieldLabel, { color: theme.secondaryText }]}>
+              Address
+            </Text>
+            {!isEditingAddress ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.editNameButton,
+                  {
+                    backgroundColor:
+                      theme.name === "dark" ? "#374151" : "#dbeafe",
+                    borderColor: theme.name === "dark" ? "#4b5563" : "#93c5fd",
+                  },
+                  pressed && styles.editNameButtonPressed,
+                ]}
+                onPress={() => {
+                  setDraftAddress(address === "N/A" ? "" : address);
+                  setIsEditingFullName(false);
+                  setIsEditingPhoneNumber(false);
+                  setIsEditingAddress(true);
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="pencil"
+                  size={14}
+                  color={theme.name === "dark" ? "#f9fafb" : "#1e3a8a"}
+                />
+              </Pressable>
+            ) : null}
+          </View>
+
+          {isEditingAddress ? (
+            <>
+              <TextInput
+                style={[
+                  styles.fieldInput,
+                  {
+                    color: theme.text,
+                    borderColor: theme.border,
+                    backgroundColor:
+                      theme.name === "dark" ? "#0f172a" : "#f8fafc",
+                  },
+                ]}
+                placeholder="Enter your address"
+                placeholderTextColor={theme.secondaryText}
+                value={draftAddress}
+                onChangeText={setDraftAddress}
+                editable={!savingAddress}
+                returnKeyType="done"
+                onSubmitEditing={handleSaveAddress}
+              />
+              <View style={styles.fullNameActionRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.nameActionButton,
+                    {
+                      backgroundColor: savingAddress ? "#93c5fd" : "#2563eb",
+                      borderColor: savingAddress ? "#93c5fd" : "#2563eb",
+                    },
+                    pressed && !savingAddress && styles.nameActionButtonPressed,
+                  ]}
+                  onPress={handleSaveAddress}
+                  disabled={savingAddress}
+                >
+                  <Text
+                    style={[
+                      styles.nameActionButtonText,
+                      {
+                        color: savingAddress
+                          ? theme.name === "dark"
+                            ? "#9ca3af"
+                            : "#475569"
+                          : "#ffffff",
+                      },
+                    ]}
+                  >
+                    {savingAddress ? "Saving..." : "Confirm"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.nameActionButton,
+                    {
+                      backgroundColor:
+                        theme.name === "dark" ? "#1f2937" : "#e2e8f0",
+                      borderColor:
+                        theme.name === "dark" ? "#374151" : "#cbd5e1",
+                    },
+                    pressed && styles.nameActionButtonPressed,
+                  ]}
+                  onPress={() => {
+                    setDraftAddress(address === "N/A" ? "" : address);
+                    setIsEditingAddress(false);
+                  }}
+                  disabled={savingAddress}
+                >
+                  <Text
+                    style={[
+                      styles.nameActionButtonText,
+                      { color: theme.name === "dark" ? "#f3f4f6" : "#0f172a" },
+                    ]}
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <Text style={[styles.fieldValue, { color: theme.text }]}>
+              {address || "N/A"}
+            </Text>
+          )}
+
+          <Text
+            style={[
+              styles.fieldLabel,
+              styles.fieldLabelSpacing,
+              { color: theme.secondaryText },
+            ]}
+          >
+            Username
+          </Text>
+          <Text style={[styles.fieldValue, { color: theme.text }]}>
+            {username}
+          </Text>
+
+          <Text
+            style={[
+              styles.fieldLabel,
+              styles.fieldLabelSpacing,
+              { color: theme.secondaryText },
+            ]}
+          >
+            Role
+          </Text>
+          <Text style={[styles.fieldValue, { color: theme.text }]}>{role}</Text>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -485,14 +1305,123 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     marginBottom: 16,
     alignItems: "center",
+    position: "relative",
+  },
+  avatarShell: {
+    width: 120,
+    height: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
   },
   avatarFrame: {
     width: 120,
     height: 120,
     borderRadius: 999,
     overflow: "hidden",
-    marginBottom: 14,
     backgroundColor: "#f3f4f6",
+    position: "relative",
+  },
+  editIconButton: {
+    position: "absolute",
+    right: 6,
+    bottom: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  editIconButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.96 }],
+  },
+  avatarMenuOverlay: {
+    position: "absolute",
+    inset: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
+  },
+  avatarMenuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 23, 42, 0.35)",
+  },
+  avatarMenu: {
+    width: "84%",
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 8,
+    zIndex: 11,
+  },
+  avatarMenuItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  avatarMenuItemPressed: {
+    opacity: 0.8,
+  },
+  avatarMenuItemText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  avatarLibraryPicker: {
+    width: "96%",
+    maxHeight: "80%",
+    minHeight: 380,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 18,
+    zIndex: 11,
+  },
+  avatarLibraryPickerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 12,
+  },
+  cancelButton: {
+    marginTop: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e5e7eb",
+  },
+  cancelButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  confirmButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2563eb",
+  },
+  confirmButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  confirmButtonDisabled: {
+    backgroundColor: "#93c5fd",
+  },
+  confirmButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#ffffff",
   },
   avatarImage: {
     width: "100%",
@@ -572,10 +1501,66 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: "600",
-    marginBottom: 6,
+    marginBottom: 0,
   },
   fieldLabelSpacing: {
     marginTop: 12,
+  },
+  fullNameHeaderRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 24,
+  },
+  editNameButton: {
+    borderWidth: 1,
+    borderRadius: 10,
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 0,
+    overflow: "hidden",
+  },
+  editNameButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  editNameButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  fieldInput: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  fullNameActionRow: {
+    width: "100%",
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 8,
+  },
+  nameActionButton: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  nameActionButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  nameActionButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
   },
   fieldValue: {
     fontSize: 16,
