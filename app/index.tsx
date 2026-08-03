@@ -3,21 +3,21 @@ import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import {
-  clearRememberedCredentials,
-  getRememberedCredentials,
-  setAuthSession,
-  setRememberedCredentials,
+    clearRememberedCredentials,
+    getRememberedCredentials,
+    setAuthSession,
+    setRememberedCredentials,
 } from "../lib/storage";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
@@ -111,12 +111,32 @@ export default function Index() {
         if (error) {
           setError(error.message || "Sign-in failed");
         } else {
+          const userMetadata =
+            (data as any)?.user?.user_metadata ||
+            (data as any)?.session?.user?.user_metadata ||
+            {};
           const signedInName =
-            (data as any)?.user?.user_metadata?.name ||
-            (data as any)?.session?.user?.user_metadata?.name ||
-            "";
+            userMetadata?.name || userMetadata?.full_name || "";
+          const signedInPhoneNumber =
+            userMetadata?.phoneNumber || userMetadata?.phone_number || "N/A";
+          const signedInAddress = userMetadata?.address || "N/A";
+          const signedInUsername =
+            userMetadata?.username || normalizedEmail.split("@")[0] || "N/A";
+          const signedInRole = userMetadata?.role || "user";
+          const signedInAvatarUri = userMetadata?.avatarUri || null;
+          const signedInAvatarLibraryKey =
+            userMetadata?.avatarLibraryKey || null;
           await setAuthSession(
-            { email: normalizedEmail, name: signedInName },
+            {
+              email: normalizedEmail,
+              name: signedInName,
+              phoneNumber: signedInPhoneNumber,
+              address: signedInAddress,
+              username: signedInUsername,
+              role: signedInRole,
+              avatarUri: signedInAvatarUri,
+              avatarLibraryKey: signedInAvatarLibraryKey,
+            },
             keepSignedIn,
           );
           if (keepSignedIn) {

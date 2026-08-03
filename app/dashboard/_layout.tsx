@@ -17,9 +17,9 @@ export default function DashboardTabsLayout() {
         tabBarStyle: {
           backgroundColor: theme.surface,
           borderTopColor: theme.border,
-                  height: Platform.OS === "ios" ? 78 : 64,
+          height: Platform.OS === "ios" ? 78 : 64,
           paddingTop: 6,
-                  paddingBottom: Platform.OS === "ios" ? 16 : 6,
+          paddingBottom: Platform.OS === "ios" ? 16 : 6,
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -64,6 +64,12 @@ export default function DashboardTabsLayout() {
               size={size}
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="edit-profile"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

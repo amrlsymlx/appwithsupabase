@@ -3,17 +3,17 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import RecaptchaWidget from "react-google-recaptcha";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
@@ -241,7 +241,17 @@ export default function SignUp() {
         const { data, error } = await supabase.auth.signUp({
           email: normalizedEmail,
           password,
-          options: { data: { name } },
+          options: {
+            data: {
+              name,
+              username: normalizedEmail.split("@")[0],
+              role: "user",
+              phoneNumber: "N/A",
+              address: "N/A",
+              avatarUri: null,
+              avatarLibraryKey: null,
+            },
+          },
         } as any);
 
         if (error) {

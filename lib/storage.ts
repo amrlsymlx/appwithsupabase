@@ -89,6 +89,12 @@ export async function setAuthSession(
   user: {
     email: string;
     name?: string | null;
+    phoneNumber?: string | null;
+    address?: string | null;
+    username?: string | null;
+    role?: string | null;
+    avatarUri?: string | null;
+    avatarLibraryKey?: string | null;
   },
   keepSignedIn = false,
 ) {
@@ -98,9 +104,48 @@ export async function setAuthSession(
       authenticated: true,
       email: user.email,
       name: user.name ?? null,
+      phoneNumber: user.phoneNumber ?? null,
+      address: user.address ?? null,
+      username: user.username ?? null,
+      role: user.role ?? null,
+      avatarUri: user.avatarUri ?? null,
+      avatarLibraryKey: user.avatarLibraryKey ?? null,
       rememberMe: keepSignedIn,
     }),
     keepSignedIn,
+  );
+}
+
+export async function updateAuthSession(
+  updates: Partial<{
+    name: string | null;
+    phoneNumber: string | null;
+    address: string | null;
+    username: string | null;
+    role: string | null;
+    avatarUri: string | null;
+    avatarLibraryKey: string | null;
+  }>,
+) {
+  const session = await getAuthSession();
+
+  if (!session?.authenticated || !session?.email) {
+    return;
+  }
+
+  await setAuthSession(
+    {
+      email: session.email,
+      name: updates.name ?? session.name ?? null,
+      phoneNumber: updates.phoneNumber ?? session.phoneNumber ?? null,
+      address: updates.address ?? session.address ?? null,
+      username: updates.username ?? session.username ?? null,
+      role: updates.role ?? session.role ?? null,
+      avatarUri: updates.avatarUri ?? session.avatarUri ?? null,
+      avatarLibraryKey:
+        updates.avatarLibraryKey ?? session.avatarLibraryKey ?? null,
+    },
+    Boolean(session.rememberMe),
   );
 }
 

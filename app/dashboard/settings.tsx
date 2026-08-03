@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, Text, View, Pressable } from "react-native";
-import { getAuthSession, clearAuthSession } from "../../lib/storage";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { clearAuthSession, getAuthSession } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
 
 export default function SettingsTab() {
@@ -33,6 +33,10 @@ export default function SettingsTab() {
     }
   };
 
+  const handleEditProfile = () => {
+    router.push("/dashboard/edit-profile");
+  };
+
   if (!ready) {
     return null;
   }
@@ -44,7 +48,18 @@ export default function SettingsTab() {
         Settings tab is ready.
       </Text>
 
-      
+      <View style={styles.actionsRow}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            pressed && styles.secondaryButtonPressed,
+          ]}
+          onPress={handleEditProfile}
+          hitSlop={10}
+        >
+          <Text style={styles.secondaryButtonText}>Edit Profile</Text>
+        </Pressable>
+      </View>
 
       <View style={styles.signOutRow}>
         <Pressable
@@ -80,11 +95,34 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 16,
   },
-  signOutRow: {
+  actionsRow: {
     marginTop: 24,
     width: "100%",
     alignItems: "flex-start",
-    // backgroundColor: "#5d9fe2"
+  },
+  signOutRow: {
+    marginTop: 12,
+    width: "100%",
+    alignItems: "flex-start",
+  },
+  secondaryButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: "#e5edff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  secondaryButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  secondaryButtonText: {
+    color: "#1e3a8a",
+    fontSize: 15,
+    fontWeight: "700",
   },
   primaryButton: {
     alignItems: "center",
