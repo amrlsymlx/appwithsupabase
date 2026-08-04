@@ -101,8 +101,19 @@ export default function DashboardHomeTab() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.textContainer}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}> 
+      <View style={styles.headerRow}>
+        <View style={styles.textContainer}>
+          <Text style={[styles.title, { color: theme.text }]}> 
+            {userName ? `Welcome ${userName}` : "Welcome"}
+          </Text>
+          <Text style={[styles.message, { color: theme.secondaryText }]}> 
+            {userEmail ? `Your email is ${userEmail}` : "You are signed in."}
+          </Text>
+          <Text style={[styles.message, { color: theme.secondaryText }]}> 
+            You are signed in.
+          </Text>
+        </View>
         <View style={styles.avatarWrap}>
           {avatarUri ? (
             <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
@@ -110,16 +121,6 @@ export default function DashboardHomeTab() {
             <SvgXml xml={avatarSvg} width="100%" height="100%" />
           )}
         </View>
-
-        <Text style={[styles.title, { color: theme.text }]}>
-          {userName ? `Welcome ${userName}` : "Welcome"}
-        </Text>
-        <Text style={[styles.message, { color: theme.secondaryText }]}>
-          {userEmail ? `Your email is ${userEmail}` : "You are signed in."}
-        </Text>
-        <Text style={[styles.message, { color: theme.secondaryText }]}>
-          You are signed in.
-        </Text>
       </View>
     </View>
   );
@@ -138,21 +139,27 @@ const styles = StyleSheet.create({
   textContainer: {
     flex: 1,
     alignItems: "flex-start",
-    width: "100%",
     backgroundColor: "transparent",
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    width: "100%",
+  },
   avatarWrap: {
-    width: 88,
-    height: 88,
+    width: 50,
+    height: 50,
     borderRadius: 999,
     overflow: "hidden",
     backgroundColor: "#f3f4f6",
-    marginBottom: 16,
   },
   avatarImage: {
     width: "100%",
     height: "100%",
     resizeMode: "cover",
+    // alignItems: "flex-end",
+    // justifyContent: "flex-end",
   },
   title: {
     fontSize: 28,

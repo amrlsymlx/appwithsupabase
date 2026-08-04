@@ -9,7 +9,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
-  InteractionManager,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -38,9 +37,9 @@ const AVATAR_LIBRARY_OPTIONS = [
 type PendingAvatarAction = "gallery" | "camera" | null;
 
 const wait = (ms: number) =>
-  new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
+ new Promise<void>((resolve) => {
+  setTimeout(resolve, ms);
+ });
 
 const promptOpenSettings = (permissionName: "Camera" | "Photo Library") => {
   Alert.alert(
@@ -83,6 +82,7 @@ export default function EditProfileScreen() {
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [avatarLibraryKey, setAvatarLibraryKey] = useState<string | null>(null);
   const [updatingAvatar, setUpdatingAvatar] = useState(false);
+  const [launchingAvatarAction, setLaunchingAvatarAction] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [showAvatarLibraryPicker, setShowAvatarLibraryPicker] = useState(false);
   const [pendingAvatarAction, setPendingAvatarAction] =
@@ -135,6 +135,17 @@ export default function EditProfileScreen() {
       if (!userId) {
         throw new Error("No authenticated user found.");
       }
+      const previousAvatarPathFromAuth =
+        session.data.session?.user?.user_metadata?.avatarPath;
+      const cachedSession = await getAuthSession();
+      const previousAvatarPath =
+        (typeof previousAvatarPathFromAuth === "string" &&
+        previousAvatarPathFromAuth.trim().length > 0
+          ? previousAvatarPathFromAuth
+          : typeof cachedSession?.avatarPath === "string" &&
+              cachedSession.avatarPath.trim().length > 0
+            ? cachedSession.avatarPath
+            : null) || null;
 
       const fileName = `${userId}/avatar-${Date.now()}.jpg`;
       const base64 = await FileSystem.readAsStringAsync(nextUri, {
@@ -183,6 +194,18 @@ export default function EditProfileScreen() {
       } as any);
       if (updateUserError) {
         throw new Error(updateUserError.message);
+      }
+
+      if (previousAvatarPath && previousAvatarPath !== fileName) {
+        const { error: removePreviousAvatarError } = await supabase.storage
+          .from("avatars")
+          .remove([previousAvatarPath]);
+        if (removePreviousAvatarError) {
+          Alert.alert(
+            "Avatar updated with warning",
+            `Your new avatar was saved, but we could not delete the previous avatar file: ${removePreviousAvatarError.message}`,
+          );
+        }
       }
     } catch (error: any) {
       Alert.alert("Avatar update failed", error?.message || "Try again.");
@@ -342,23 +365,115 @@ export default function EditProfileScreen() {
     }
   };
 
+  const ensureMediaLibraryPermission = async () => {
+    const currentPermission =
+      await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (currentPermission.granted) {
+      return true;
+    }
+
+    if (!currentPermission.canAskAgain) {
+      promptOpenSettings("Photo Library");
+      return false;
+    }
+
+    const requestedPermission =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!requestedPermission.granted) {
+      if (!requestedPermission.canAskAgain) {
+        promptOpenSettings("Photo Library");
+        return false;
+      }
+      Alert.alert(
+        "Permission required",
+        "Please allow photo library access to choose an avatar.",
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  const ensureCameraPermission = async () => {
+    const currentPermission = await ImagePicker.getCameraPermissionsAsync();
+    if (currentPermission.granted) {
+      return true;
+    }
+
+    if (!currentPermission.canAskAgain) {
+      promptOpenSettings("Camera");
+      return false;
+    }
+
+    const requestedPermission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!requestedPermission.granted) {
+      if (!requestedPermission.canAskAgain) {
+        promptOpenSettings("Camera");
+        return false;
+      }
+      Alert.alert(
+        "Permission required",
+        "Please allow camera access to take an avatar photo.",
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  const runAvatarAction = async (action: Exclude<PendingAvatarAction, null>) => {
+    if (launchingAvatarAction) {
+      return;
+    }
+
+    setLaunchingAvatarAction(true);
+    try {
+      if (Platform.OS === "ios") {
+        await wait(120);
+      }
+
+      if (action === "gallery") {
+        await launchGalleryPicker();
+        return;
+      }
+
+      await launchCameraPicker();
+    } finally {
+      setLaunchingAvatarAction(false);
+    }
+  };
+
+  const launchNativeAvatarAction = (
+    action: "gallery" | "camera",
+  ) => {
+    if (updatingAvatar || launchingAvatarAction) {
+      return;
+    }
+
+    setPendingAvatarAction(action);
+    setShowAvatarMenu(false);
+    setShowAvatarLibraryPicker(false);
+  };
+
+  const flushPendingAvatarAction = async () => {
+    if (!pendingAvatarAction || launchingAvatarAction || updatingAvatar) {
+      return;
+    }
+
+    const action = pendingAvatarAction;
+    setPendingAvatarAction(null);
+    await runAvatarAction(action);
+  };
+
   const launchGalleryPicker = async () => {
     try {
-      const permission =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        if (!permission.canAskAgain) {
-          promptOpenSettings("Photo Library");
-          return;
-        }
-        Alert.alert(
-          "Permission required",
-          "Please allow photo library access to choose an avatar.",
-        );
+      const hasPermission = await ensureMediaLibraryPermission();
+      if (!hasPermission) {
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -375,20 +490,13 @@ export default function EditProfileScreen() {
 
   const launchCameraPicker = async () => {
     try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        if (!permission.canAskAgain) {
-          promptOpenSettings("Camera");
-          return;
-        }
-        Alert.alert(
-          "Permission required",
-          "Please allow camera access to take an avatar photo.",
-        );
+      const hasPermission = await ensureCameraPermission();
+      if (!hasPermission) {
         return;
       }
 
       const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -403,49 +511,6 @@ export default function EditProfileScreen() {
       Alert.alert("Avatar update failed", error?.message || "Try again.");
     }
   };
-
-  const queueNativeAvatarAction = (
-    action: Exclude<PendingAvatarAction, null>,
-  ) => {
-    if (updatingAvatar) {
-      return;
-    }
-    setPendingAvatarAction(action);
-    setShowAvatarMenu(false);
-  };
-
-  const waitForPickerLaunchWindow = () =>
-    new Promise<void>((resolve) => {
-      InteractionManager.runAfterInteractions(() => {
-        requestAnimationFrame(() => resolve());
-      });
-    });
-
-  useEffect(() => {
-    const runPendingAction = async () => {
-      if (showAvatarMenu || !pendingAvatarAction) {
-        return;
-      }
-
-      try {
-        await waitForPickerLaunchWindow();
-        if (Platform.OS === "ios") {
-          await wait(10);
-        }
-
-        if (pendingAvatarAction === "gallery") {
-          await launchGalleryPicker();
-        }
-        if (pendingAvatarAction === "camera") {
-          await launchCameraPicker();
-        }
-      } finally {
-        setPendingAvatarAction(null);
-      }
-    };
-
-    runPendingAction();
-  }, [pendingAvatarAction, showAvatarMenu]);
 
   useEffect(() => {
     // Warm permission checks on iOS so first picker launch feels less delayed.
@@ -597,51 +662,16 @@ export default function EditProfileScreen() {
           Edit profile page is ready.
         </Text> */}
 
-        <View
-          style={[
-            styles.avatarCard,
-            {
-              borderColor: theme.border,
-              backgroundColor: theme.name === "dark" ? "#111827" : "#ffffff",
-            },
-          ]}
-        >
-          <View style={styles.avatarShell}>
-            <View style={styles.avatarFrame}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-              ) : (
-                <SvgXml xml={avatarSvg} width="100%" height="100%" />
-              )}
-            </View>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.editIconButton,
-                {
-                  backgroundColor:
-                    theme.name === "dark" ? "#1f2937" : "#ffffff",
-                  borderColor: theme.name === "dark" ? "#374151" : "#cbd5e1",
-                },
-                pressed && styles.editIconButtonPressed,
-              ]}
-              onPress={() => setShowAvatarMenu(true)}
-              hitSlop={10}
-            >
-              <MaterialCommunityIcons
-                name="pencil"
-                size={16}
-                color={theme.name === "dark" ? "#f9fafb" : "#1e3a8a"}
-              />
-            </Pressable>
-          </View>
-        </View>
-
         <Modal
           visible={showAvatarMenu}
           transparent
           animationType="fade"
           onRequestClose={() => setShowAvatarMenu(false)}
+          onDismiss={() => {
+            if (pendingAvatarAction) {
+              void flushPendingAvatarAction();
+            }
+          }}
         >
           <View style={styles.avatarMenuOverlay}>
             <Pressable
@@ -663,8 +693,10 @@ export default function EditProfileScreen() {
                   styles.avatarMenuItem,
                   pressed && styles.avatarMenuItemPressed,
                 ]}
-                onPress={() => queueNativeAvatarAction("gallery")}
-                disabled={updatingAvatar}
+                onPress={() => {
+                  launchNativeAvatarAction("gallery");
+                }}
+                disabled={updatingAvatar || launchingAvatarAction}
               >
                 <Text
                   style={[styles.avatarMenuItemText, { color: theme.text }]}
@@ -678,8 +710,10 @@ export default function EditProfileScreen() {
                   styles.avatarMenuItem,
                   pressed && styles.avatarMenuItemPressed,
                 ]}
-                onPress={() => queueNativeAvatarAction("camera")}
-                disabled={updatingAvatar}
+                onPress={() => {
+                  launchNativeAvatarAction("camera");
+                }}
+                disabled={updatingAvatar || launchingAvatarAction}
               >
                 <Text
                   style={[styles.avatarMenuItemText, { color: theme.text }]}
@@ -715,7 +749,7 @@ export default function EditProfileScreen() {
                 onPress={() => setShowAvatarMenu(false)}
                 disabled={updatingAvatar}
               >
-                <Text style={[styles.avatarMenuItemText, { color: "#dc2626" }]}>
+                <Text style={[styles.avatarMenuItemText, { color: "#dc2626" }]}> 
                   Cancel
                 </Text>
               </Pressable>
@@ -834,7 +868,7 @@ export default function EditProfileScreen() {
                 }}
                 disabled={updatingAvatar}
               >
-                <Text style={[styles.cancelButtonText, { color: "#dc2626" }]}>
+                <Text style={[styles.cancelButtonText, { color: "#dc2626" }]}> 
                   Cancel
                 </Text>
               </Pressable>
@@ -851,10 +885,40 @@ export default function EditProfileScreen() {
             },
           ]}
         >
-          <View style={styles.fullNameHeaderRow}>
-            <Text style={[styles.fieldLabel, { color: theme.secondaryText }]}>
-              Full Name
-            </Text>
+          <View style={styles.profileAvatarRow}>
+            <View style={styles.avatarShell}>
+              <View style={styles.avatarFrame}>
+                {avatarUri ? (
+                  <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                ) : (
+                  <SvgXml xml={avatarSvg} width="100%" height="100%" />
+                )}
+              </View>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.editIconButton,
+                  {
+                    backgroundColor:
+                      theme.name === "dark" ? "#1f2937" : "#ffffff",
+                    borderColor: theme.name === "dark" ? "#374151" : "#cbd5e1",
+                  },
+                  pressed && styles.editIconButtonPressed,
+                ]}
+                onPress={() => setShowAvatarMenu(true)}
+                hitSlop={10}
+              >
+                <MaterialCommunityIcons
+                  name="pencil"
+                  size={16}
+                  color={theme.name === "dark" ? "#f9fafb" : "#1e3a8a"}
+                />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={[styles.fullNameHeaderRow, styles.fieldLabelSpacing]}>
+            <Text style={[styles.fieldLabel, { color: theme.secondaryText }]}>Full Name</Text>
             {!isEditingFullName ? (
               <Pressable
                 style={({ pressed }) => [
@@ -1297,22 +1361,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 16,
   },
-  avatarCard: {
-    width: "100%",
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    backgroundColor: "#ffffff",
-    marginBottom: 16,
-    alignItems: "center",
-    position: "relative",
-  },
   avatarShell: {
     width: 120,
     height: 120,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
+  },
+  profileAvatarRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 18,
   },
   avatarFrame: {
     width: 120,
