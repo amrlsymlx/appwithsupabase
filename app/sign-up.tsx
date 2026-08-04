@@ -16,6 +16,7 @@ import {
     View,
 } from "react-native";
 import { WebView } from "react-native-webview";
+import { SIGNUP_EMAIL_REDIRECT } from "../lib/authRedirect";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 
@@ -242,6 +243,7 @@ export default function SignUp() {
           email: normalizedEmail,
           password,
           options: {
+            emailRedirectTo: SIGNUP_EMAIL_REDIRECT,
             data: {
               name,
               username: normalizedEmail.split("@")[0],

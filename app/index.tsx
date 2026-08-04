@@ -13,6 +13,7 @@ import {
     TextInput,
     View,
 } from "react-native";
+import { SIGNUP_EMAIL_REDIRECT } from "../lib/authRedirect";
 import {
     clearRememberedCredentials,
     getRememberedCredentials,
@@ -28,7 +29,14 @@ type EmailVerificationParams = {
   type: string | null;
   accessToken: string | null;
   refreshToken: string | null;
+  errorCode: string | null;
   errorDescription: string | null;
+};
+
+type VerificationBannerState = {
+  tone: "error" | "success";
+  message: string;
+  allowResend: boolean;
 };
 
 const extractEmailVerificationParams = (
@@ -62,12 +70,29 @@ const extractEmailVerificationParams = (
       queryParams.get("access_token") ?? hashParams.get("access_token"),
     refreshToken:
       queryParams.get("refresh_token") ?? hashParams.get("refresh_token"),
+    errorCode:
+      queryParams.get("error_code") ?? hashParams.get("error_code"),
     errorDescription:
       queryParams.get("error_description") ??
       hashParams.get("error_description") ??
       queryParams.get("error") ??
       hashParams.get("error"),
   };
+};
+
+const shouldOfferVerificationResend = (
+  errorCode: string | null,
+  errorDescription: string | null,
+) =>
+  errorCode === "otp_expired" ||
+  /expired|invalid/i.test(errorDescription ?? "");
+
+const clearProcessedAuthUrl = () => {
+  if (Platform.OS !== "web" || typeof window === "undefined") {
+    return;
+  }
+
+  window.history.replaceState({}, document.title, window.location.pathname);
 };
 
 export default function Index() {
@@ -80,14 +105,15 @@ export default function Index() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
-  const [passwordTouched, setPasswordTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [keepSignedIn, setKeepSignedIn] = useState(true);
+  const [resendingVerification, setResendingVerification] = useState(false);
+  const [verificationBanner, setVerificationBanner] =
+    useState<VerificationBannerState | null>(null);
 
   const handleLogin = async () => {
     setEmailTouched(true);
-    setPasswordTouched(true);
     setError("");
 
     const isEmailValid = validateEmail(email);
@@ -161,7 +187,6 @@ export default function Index() {
           setEmail("");
           setPassword("");
           setEmailTouched(false);
-          setPasswordTouched(false);
           router.replace("/dashboard" as any);
         }
       } else {
@@ -189,6 +214,64 @@ export default function Index() {
 
   const formValid = validateEmail(email) && validatePassword(password);
   const emailError = emailTouched && !validateEmail(email);
+
+  const handleResendVerification = async () => {
+    setEmailTouched(true);
+    setError("");
+
+    const normalizedEmail = email.trim();
+    if (!validateEmail(normalizedEmail)) {
+      setVerificationBanner({
+        tone: "error",
+        message:
+          "Enter the email address you used to register, then request a new verification link.",
+        allowResend: true,
+      });
+      return;
+    }
+
+    if (!SUPABASE_CONFIGURED || !supabase) {
+      setVerificationBanner({
+        tone: "error",
+        message:
+          "Supabase is not configured. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env.",
+        allowResend: true,
+      });
+      return;
+    }
+
+    setResendingVerification(true);
+
+    const { error: resendError } = await supabase.auth.resend({
+      type: "signup",
+      email: normalizedEmail,
+      options: {
+        emailRedirectTo: SIGNUP_EMAIL_REDIRECT,
+      },
+    });
+
+    setResendingVerification(false);
+
+    if (resendError) {
+      const fromRateLimit =
+        resendError.code === "over_email_send_rate_limit" ||
+        resendError.status === 429;
+      setVerificationBanner({
+        tone: "error",
+        message: fromRateLimit
+          ? "Too many verification emails were sent. Please wait a moment and try again."
+          : resendError.message || "Unable to send a new verification link.",
+        allowResend: true,
+      });
+      return;
+    }
+
+    setVerificationBanner({
+      tone: "success",
+      message: `A new verification link has been sent to ${normalizedEmail}.`,
+      allowResend: false,
+    });
+  };
 
   useEffect(() => {
     const loadSession = async () => {
@@ -224,13 +307,23 @@ export default function Index() {
         type,
         accessToken,
         refreshToken,
+        errorCode,
         errorDescription,
       } = extractEmailVerificationParams(urlToParse);
-      if (type !== "signup") {
+
+      const isVerificationUrl =
+        type === "signup" ||
+        Boolean(code) ||
+        Boolean(tokenHash) ||
+        Boolean(accessToken && refreshToken) ||
+        Boolean(errorCode || errorDescription);
+
+      if (!isVerificationUrl) {
         return;
       }
 
       processedVerificationUrlRef.current = urlToParse;
+      clearProcessedAuthUrl();
 
       let verificationError: string | null = null;
 
@@ -266,26 +359,25 @@ export default function Index() {
       }
 
       if (verificationError) {
-        if (Platform.OS === "web" && typeof window !== "undefined") {
-          window.alert(`Email verification failed: ${verificationError}`);
-        } else {
-          Alert.alert("Email verification failed", verificationError);
-        }
+        setVerificationBanner({
+          tone: "error",
+          message: `Email verification failed: ${verificationError}`,
+          allowResend: shouldOfferVerificationResend(
+            errorCode,
+            verificationError,
+          ),
+        });
         return;
       }
 
       await supabase.auth.signOut();
 
-      const successMessage =
-        "Email verification success, you can now login using your credential";
-
-      if (Platform.OS === "web" && typeof window !== "undefined") {
-        window.alert(successMessage);
-      } else {
-        Alert.alert("Email verified", successMessage);
-      }
-
-      router.replace("/");
+      setVerificationBanner({
+        tone: "success",
+        message:
+          "Email verification success, you can now login using your credential.",
+        allowResend: false,
+      });
     };
 
     void handleEmailVerification();
@@ -347,6 +439,26 @@ export default function Index() {
               </View>
             ) : null}
 
+            {verificationBanner ? (
+              <View
+                style={[
+                  styles.verificationBanner,
+                  verificationBanner.tone === "error"
+                    ? styles.verificationBannerError
+                    : styles.verificationBannerSuccess,
+                ]}
+              >
+                <Text style={styles.verificationBannerText}>
+                  {verificationBanner.message}
+                </Text>
+                {verificationBanner.allowResend ? (
+                  <Text style={styles.verificationBannerHint}>
+                    Enter your email below to request a new verification link.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+
             <TextInput
               style={[
                 styles.input,
@@ -381,6 +493,25 @@ export default function Index() {
               </Text>
             ) : null}
 
+            {verificationBanner?.allowResend ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryActionButton,
+                  (resendingVerification || !SUPABASE_CONFIGURED) &&
+                    styles.secondaryActionButtonDisabled,
+                  pressed && styles.secondaryButtonPressed,
+                ]}
+                onPress={handleResendVerification}
+                disabled={resendingVerification || !SUPABASE_CONFIGURED}
+              >
+                <Text style={styles.secondaryActionButtonText}>
+                  {resendingVerification
+                    ? "Sending new link..."
+                    : "Request new verification link"}
+                </Text>
+              </Pressable>
+            ) : null}
+
             <View style={styles.passwordRow}>
               <TextInput
                 style={[
@@ -409,7 +540,6 @@ export default function Index() {
                   setPassword(t);
                   if (error) setError("");
                 }}
-                onBlur={() => setPasswordTouched(true)}
                 secureTextEntry={!showPassword}
               />
               <Pressable
@@ -657,5 +787,47 @@ const styles = StyleSheet.create({
   },
   bannerText: {
     fontSize: 12,
+  },
+  verificationBanner: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+  },
+  verificationBannerError: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#fecaca",
+  },
+  verificationBannerSuccess: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#a7f3d0",
+  },
+  verificationBannerText: {
+    color: "#111827",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  verificationBannerHint: {
+    color: "#374151",
+    fontSize: 12,
+    marginTop: 6,
+  },
+  secondaryActionButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#2563eb",
+    marginBottom: 12,
+  },
+  secondaryActionButtonDisabled: {
+    opacity: 0.6,
+  },
+  secondaryActionButtonText: {
+    color: "#2563eb",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

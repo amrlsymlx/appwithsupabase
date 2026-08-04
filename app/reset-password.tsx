@@ -101,7 +101,7 @@ const createRecaptchaHtml = (siteKey: string) => `<!doctype html>
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <script npxsrc="https://www.google.com/recaptcha/api.js" async defer></script>
     <style>
       body {
         margin: 0;
