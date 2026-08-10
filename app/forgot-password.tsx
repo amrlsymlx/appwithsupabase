@@ -1,5 +1,4 @@
-﻿import * as Linking from "expo-linking";
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import RecaptchaWidget from "react-google-recaptcha";
 import {
@@ -16,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { WebView } from "react-native-webview";
+import { RESET_PASSWORD_REDIRECT } from "../lib/authRedirect";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 
@@ -141,16 +141,10 @@ export default function ForgotPassword() {
     }
 
     setLoading(true);
-    const DEFAULT_REDIRECT = Linking.createURL("/reset-password");
-    const RESET_REDIRECT_RAW = process.env.EXPO_PUBLIC_RESET_REDIRECT_URL || "";
-    const RESET_REDIRECT =
-      RESET_REDIRECT_RAW.trim().replace(/^['\"]|['\"]$/g, "") ||
-      DEFAULT_REDIRECT;
-    const redirectTo = RESET_REDIRECT;
     const { error } = await supabase.auth.resetPasswordForEmail(
       normalizedEmail,
       {
-        redirectTo,
+        redirectTo: RESET_PASSWORD_REDIRECT,
       },
     );
     setLoading(false);

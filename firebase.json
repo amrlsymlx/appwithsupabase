@@ -1,6 +1,19 @@
 {
   "hosting": {
     "public": "dist",
+    "cleanUrls": true,
+    "redirects": [
+      {
+        "source": "/reset-password/",
+        "destination": "/reset-password",
+        "type": 301
+      },
+      {
+        "source": "/sign-up/",
+        "destination": "/sign-up",
+        "type": 301
+      }
+    ],
     "predeploy": [
       "npm run predeploy"
     ],
