@@ -8,10 +8,12 @@
     "scheme": "vcode",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
     "ios": {
       "icon": "./assets/AppIcons/appstore.png",
       "supportsTablet": true
     },
+
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
@@ -21,10 +23,18 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.TestApp"
     },
+
     "web": {
       "output": "static",
-      "favicon": "./assets/AppIcons/appstore.png"
+      "favicon": "./assets/AppIcons/appstore.png",
+      "index": {
+        "head": [
+          "<script async src='https://www.googletagmanager.com/gtag/js?id=G-TV1G2VXW01'></script>",
+          "<script>window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'G-TV1G2VXW01');</script>"
+        ]
+      }
     },
+
     "plugins": [
       "expo-router",
       [
@@ -41,6 +51,7 @@
       ],
       "expo-secure-store"
     ],
+
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
