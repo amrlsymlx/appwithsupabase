@@ -1,4 +1,4 @@
-import { bottts } from "@dicebear/collection";
+﻿import { bottts } from "@dicebear/collection";
 import { createAvatar } from "@dicebear/core";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
@@ -134,7 +134,7 @@ export default function DashboardHomeTab() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* On web skip opacity animation — invisible Animated.View blocks pointer events */}
+      {/* On web skip opacity animation â€” invisible Animated.View blocks pointer events */}
       {Platform.OS === "web" ? (
         <Pressable
           onPress={openDrawer}

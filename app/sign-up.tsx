@@ -1,19 +1,19 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+﻿import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import RecaptchaWidget from "react-google-recaptcha";
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { SIGNUP_EMAIL_REDIRECT } from "../lib/authRedirect";
@@ -652,7 +652,7 @@ export default function SignUp() {
                     ]}
                   >
                     {agreeToTerms ? (
-                      <Text style={styles.checkboxMark}>✓</Text>
+                      <Text style={styles.checkboxMark}>{"\u2713"}</Text>
                     ) : null}
                   </View>
                 </Pressable>
@@ -731,7 +731,7 @@ export default function SignUp() {
                       ]}
                     >
                       {isRecaptchaVerified ? (
-                        <Text style={styles.checkboxMark}>✓</Text>
+                        <Text style={styles.checkboxMark}>{"\u2713"}</Text>
                       ) : null}
                     </View>
                     <Text style={[styles.captchaLabel, { color: theme.text }]}>

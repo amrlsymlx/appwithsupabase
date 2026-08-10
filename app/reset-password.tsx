@@ -1,4 +1,4 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+﻿import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
@@ -101,7 +101,7 @@ const createRecaptchaHtml = (siteKey: string) => `<!doctype html>
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script npxsrc="https://www.google.com/recaptcha/api.js" async defer></script>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <style>
       body {
         margin: 0;
@@ -930,7 +930,7 @@ export default function ResetPassword() {
                       ]}
                     >
                       {isRecaptchaVerified ? (
-                        <Text style={styles.checkboxMark}>✓</Text>
+                        <Text style={styles.checkboxMark}>{"\u2713"}</Text>
                       ) : null}
                     </View>
                     <Text style={[styles.robotText, { color: theme.text }]}>

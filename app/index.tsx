@@ -1,24 +1,24 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+﻿import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { SIGNUP_EMAIL_REDIRECT } from "../lib/authRedirect";
 import {
-    clearRememberedCredentials,
-    getRememberedCredentials,
-    setAuthSession,
-    setRememberedCredentials,
+  clearRememberedCredentials,
+  getRememberedCredentials,
+  setAuthSession,
+  setRememberedCredentials,
 } from "../lib/storage";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
@@ -70,8 +70,7 @@ const extractEmailVerificationParams = (
       queryParams.get("access_token") ?? hashParams.get("access_token"),
     refreshToken:
       queryParams.get("refresh_token") ?? hashParams.get("refresh_token"),
-    errorCode:
-      queryParams.get("error_code") ?? hashParams.get("error_code"),
+    errorCode: queryParams.get("error_code") ?? hashParams.get("error_code"),
     errorDescription:
       queryParams.get("error_description") ??
       hashParams.get("error_description") ??
@@ -591,7 +590,7 @@ export default function Index() {
                   ]}
                 >
                   {keepSignedIn ? (
-                    <Text style={styles.checkboxMark}>✓</Text>
+                    <Text style={styles.checkboxMark}>{"\u2713"}</Text>
                   ) : null}
                 </View>
               </Pressable>

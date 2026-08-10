@@ -1,4 +1,4 @@
-import * as Linking from "expo-linking";
+﻿import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import RecaptchaWidget from "react-google-recaptcha";
@@ -307,7 +307,7 @@ export default function ForgotPassword() {
                       ]}
                     >
                       {isRecaptchaVerified ? (
-                        <Text style={styles.checkboxMark}>✓</Text>
+                        <Text style={styles.checkboxMark}>{"\u2713"}</Text>
                       ) : null}
                     </View>
                     <Text style={[styles.robotText, { color: theme.text }]}>

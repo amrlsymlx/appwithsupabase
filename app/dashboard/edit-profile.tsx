@@ -1,4 +1,4 @@
-import { bottts } from "@dicebear/collection";
+﻿import { bottts } from "@dicebear/collection";
 import { createAvatar } from "@dicebear/core";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { decode as decodeBase64 } from "base64-arraybuffer";
@@ -185,7 +185,7 @@ export default function EditProfileScreen() {
         avatarLibraryKey: null,
       });
 
-      // Store only the file path in metadata — fresh signed URLs are generated on sign-in
+      // Store only the file path in metadata â€” fresh signed URLs are generated on sign-in
       const { error: updateUserError } = await supabase.auth.updateUser({
         data: {
           avatarPath: fileName,
