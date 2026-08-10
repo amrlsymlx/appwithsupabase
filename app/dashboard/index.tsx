@@ -2,8 +2,18 @@ import { bottts } from "@dicebear/collection";
 import { createAvatar } from "@dicebear/core";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import {
+  Animated,
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
+import { useDashboardDrawer } from "../../components/dashboard/DrawerContext";
 import { getAuthSession, updateAuthSession } from "../../lib/storage";
 import { SUPABASE_CONFIGURED, supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme";
@@ -15,6 +25,8 @@ const parseLibraryKey = (key: string) => {
 
 export default function DashboardHomeTab() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { progress: drawerProgress, openDrawer } = useDashboardDrawer();
   const { theme } = useTheme();
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
@@ -38,9 +50,19 @@ export default function DashboardHomeTab() {
     [activeAvatarSeed],
   );
 
-  // Reload session every time this tab comes into focus
+  const avatarOpacity = useMemo(
+    () =>
+      drawerProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0],
+      }),
+    [drawerProgress],
+  );
+
   useFocusEffect(
     useCallback(() => {
+      let mounted = true;
+
       const loadSession = async () => {
         const session = await getAuthSession();
         if (!session?.authenticated) {
@@ -48,11 +70,14 @@ export default function DashboardHomeTab() {
           return;
         }
 
+        if (!mounted) {
+          return;
+        }
+
         setUserName(session.name || "");
         setUserEmail(session.email || "");
         setAvatarLibraryKey(session.avatarLibraryKey || null);
 
-        // Fetch fresh metadata from Supabase to sync avatar across devices
         let freshAvatarUri = session.avatarUri || null;
         if (SUPABASE_CONFIGURED && supabase) {
           const { data: userData } = await supabase.auth.getUser();
@@ -88,11 +113,18 @@ export default function DashboardHomeTab() {
             });
           }
         }
-        setAvatarUri(freshAvatarUri);
-        setReady(true);
+
+        if (mounted) {
+          setAvatarUri(freshAvatarUri);
+          setReady(true);
+        }
       };
 
-      loadSession();
+      void loadSession();
+
+      return () => {
+        mounted = false;
+      };
     }, [router]),
   );
 
@@ -101,26 +133,73 @@ export default function DashboardHomeTab() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}> 
-      <View style={styles.headerRow}>
-        <View style={styles.textContainer}>
-          <Text style={[styles.title, { color: theme.text }]}> 
-            {userName ? `Welcome ${userName}` : "Welcome"}
-          </Text>
-          <Text style={[styles.message, { color: theme.secondaryText }]}> 
-            {userEmail ? `Your email is ${userEmail}` : "You are signed in."}
-          </Text>
-          <Text style={[styles.message, { color: theme.secondaryText }]}> 
-            You are signed in.
-          </Text>
-        </View>
-        <View style={styles.avatarWrap}>
-          {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-          ) : (
-            <SvgXml xml={avatarSvg} width="100%" height="100%" />
-          )}
-        </View>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* On web skip opacity animation — invisible Animated.View blocks pointer events */}
+      {Platform.OS === "web" ? (
+        <Pressable
+          onPress={openDrawer}
+          style={[
+            styles.avatarTrigger,
+            {
+              backgroundColor: theme.surface,
+              top: 16 + insets.top,
+            },
+          ]}
+          hitSlop={8}
+        >
+          <View
+            style={[
+              styles.avatarWrap,
+              { backgroundColor: theme.inputBackground },
+            ]}
+          >
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+            ) : (
+              <SvgXml xml={avatarSvg} width="100%" height="100%" />
+            )}
+          </View>
+        </Pressable>
+      ) : (
+        <Animated.View style={{ opacity: avatarOpacity }}>
+          <Pressable
+            onPress={openDrawer}
+            style={[
+              styles.avatarTrigger,
+              {
+                borderColor: theme.border,
+                backgroundColor: theme.surface,
+                top: 16 + insets.top,
+              },
+            ]}
+            hitSlop={8}
+          >
+            <View
+              style={[
+                styles.avatarWrap,
+                { backgroundColor: theme.inputBackground },
+              ]}
+            >
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+              ) : (
+                <SvgXml xml={avatarSvg} width="100%" height="100%" />
+              )}
+            </View>
+          </Pressable>
+        </Animated.View>
+      )}
+
+      <View style={styles.contentArea}>
+        <Text style={[styles.title, { color: theme.text }]}>
+          {userName ? `Welcome ${userName}` : "Welcome"}
+        </Text>
+        <Text style={[styles.message, { color: theme.secondaryText }]}>
+          {userEmail ? `Your email is ${userEmail}` : "You are signed in."}
+        </Text>
+        <Text style={[styles.message, { color: theme.secondaryText }]}>
+          Tap the avatar or swipe right anywhere to open the drawer.
+        </Text>
       </View>
     </View>
   );
@@ -129,76 +208,50 @@ export default function DashboardHomeTab() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "flex-start",
-    alignItems: "flex-start",
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 24,
-    position: "relative",
-  },
-  textContainer: {
-    flex: 1,
-    alignItems: "flex-start",
     backgroundColor: "transparent",
+    paddingHorizontal: 18,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    width: "100%",
+  avatarTrigger: {
+    position: "absolute",
+    left: 10,
+    zIndex: 20,
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   avatarWrap: {
-    width: 50,
-    height: 50,
+    width: 40,
+    height: 40,
     borderRadius: 999,
     overflow: "hidden",
-    backgroundColor: "#f3f4f6",
   },
   avatarImage: {
     width: "100%",
     height: "100%",
     resizeMode: "cover",
-    // alignItems: "flex-end",
-    // justifyContent: "flex-end",
+  },
+  contentArea: {
+    flex: 1,
+    justifyContent: "flex-start",
+    paddingTop: 130,
+    paddingRight: 8,
   },
   title: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "700",
     marginBottom: 16,
     textAlign: "left",
   },
   message: {
     fontSize: 16,
-    color: "#333",
     textAlign: "left",
-    marginBottom: 24,
-  },
-  signOutRow: {
-    marginTop: 24,
-    width: "100%",
-    alignItems: "flex-start",
-  },
-  primaryButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-    backgroundColor: "#1d4ed8",
-    zIndex: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  primaryButtonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
-  },
-  primaryButtonText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "800",
+    marginBottom: 16,
   },
 });

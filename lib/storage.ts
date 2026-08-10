@@ -1,5 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
+import { supabase, SUPABASE_CONFIGURED } from "./supabase";
 
 const memoryStore = new Map<string, string>();
 const AUTH_SESSION_KEY = "auth_session";
@@ -130,7 +131,49 @@ export async function updateAuthSession(
     avatarLibraryKey: string | null;
   }>,
 ) {
-  const session = await getAuthSession();
+  let session = await getAuthSession();
+
+  if (
+    (!session?.authenticated || !session?.email) &&
+    SUPABASE_CONFIGURED &&
+    supabase
+  ) {
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData?.user;
+
+    if (user?.email) {
+      const meta = user.user_metadata || {};
+      await setAuthSession(
+        {
+          email: user.email,
+          name:
+            typeof meta.name === "string"
+              ? meta.name
+              : typeof meta.full_name === "string"
+                ? meta.full_name
+                : null,
+          phoneNumber:
+            typeof meta.phoneNumber === "string"
+              ? meta.phoneNumber
+              : typeof meta.phone_number === "string"
+                ? meta.phone_number
+                : null,
+          address: typeof meta.address === "string" ? meta.address : null,
+          username: typeof meta.username === "string" ? meta.username : null,
+          role: typeof meta.role === "string" ? meta.role : null,
+          avatarPath:
+            typeof meta.avatarPath === "string" ? meta.avatarPath : null,
+          avatarLibraryKey:
+            typeof meta.avatarLibraryKey === "string"
+              ? meta.avatarLibraryKey
+              : null,
+          avatarUri: null,
+        },
+        false,
+      );
+      session = await getAuthSession();
+    }
+  }
 
   if (!session?.authenticated || !session?.email) {
     return;

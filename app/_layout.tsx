@@ -8,8 +8,7 @@ export default function RootLayout() {
     pathname === "/" ||
     pathname === "/sign-up" ||
     pathname === "/forgot-password" ||
-    pathname === "/reset-password" ||
-    pathname === "/dashboard/settings";
+    pathname === "/reset-password";
 
   return (
     <ThemeProvider>

@@ -1,14 +1,14 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    createContext,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
-import { Animated, Pressable, StyleSheet, View, Platform } from "react-native";
+import { Animated, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type ThemeName = "light" | "dark";
@@ -82,7 +82,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const stored = localStorage.getItem("themeName");
         if (stored === "dark" || stored === "light") return stored as ThemeName;
         const prefersDark =
-          window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches;
         return prefersDark ? "dark" : "light";
       } catch {
         return "light";
@@ -136,7 +137,7 @@ export function useTheme() {
   return context;
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ inline = false }: { inline?: boolean } = {}) {
   const { themeName, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
   const isDark = themeName === "dark";
@@ -158,7 +159,11 @@ export function ThemeToggle() {
   return (
     <Pressable
       onPress={toggleTheme}
-      style={[styles.switchContainer, { top: Math.max(12, insets.top + 8) }]}
+      style={
+        inline
+          ? undefined
+          : [styles.switchContainer, { top: Math.max(12, insets.top + 8) }]
+      }
       accessibilityRole="switch"
       accessibilityState={{ checked: isDark }}
     >

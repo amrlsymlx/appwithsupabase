@@ -37,9 +37,9 @@ const AVATAR_LIBRARY_OPTIONS = [
 type PendingAvatarAction = "gallery" | "camera" | null;
 
 const wait = (ms: number) =>
- new Promise<void>((resolve) => {
-  setTimeout(resolve, ms);
- });
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 const promptOpenSettings = (permissionName: "Camera" | "Photo Library") => {
   Alert.alert(
@@ -405,7 +405,8 @@ export default function EditProfileScreen() {
       return false;
     }
 
-    const requestedPermission = await ImagePicker.requestCameraPermissionsAsync();
+    const requestedPermission =
+      await ImagePicker.requestCameraPermissionsAsync();
     if (!requestedPermission.granted) {
       if (!requestedPermission.canAskAgain) {
         promptOpenSettings("Camera");
@@ -421,7 +422,9 @@ export default function EditProfileScreen() {
     return true;
   };
 
-  const runAvatarAction = async (action: Exclude<PendingAvatarAction, null>) => {
+  const runAvatarAction = async (
+    action: Exclude<PendingAvatarAction, null>,
+  ) => {
     if (launchingAvatarAction) {
       return;
     }
@@ -443,9 +446,7 @@ export default function EditProfileScreen() {
     }
   };
 
-  const launchNativeAvatarAction = (
-    action: "gallery" | "camera",
-  ) => {
+  const launchNativeAvatarAction = (action: "gallery" | "camera") => {
     if (updatingAvatar || launchingAvatarAction) {
       return;
     }
@@ -749,7 +750,7 @@ export default function EditProfileScreen() {
                 onPress={() => setShowAvatarMenu(false)}
                 disabled={updatingAvatar}
               >
-                <Text style={[styles.avatarMenuItemText, { color: "#dc2626" }]}> 
+                <Text style={[styles.avatarMenuItemText, { color: "#dc2626" }]}>
                   Cancel
                 </Text>
               </Pressable>
@@ -868,7 +869,7 @@ export default function EditProfileScreen() {
                 }}
                 disabled={updatingAvatar}
               >
-                <Text style={[styles.cancelButtonText, { color: "#dc2626" }]}> 
+                <Text style={[styles.cancelButtonText, { color: "#dc2626" }]}>
                   Cancel
                 </Text>
               </Pressable>
@@ -889,7 +890,10 @@ export default function EditProfileScreen() {
             <View style={styles.avatarShell}>
               <View style={styles.avatarFrame}>
                 {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                  <Image
+                    source={{ uri: avatarUri }}
+                    style={styles.avatarImage}
+                  />
                 ) : (
                   <SvgXml xml={avatarSvg} width="100%" height="100%" />
                 )}
@@ -918,7 +922,9 @@ export default function EditProfileScreen() {
           </View>
 
           <View style={[styles.fullNameHeaderRow, styles.fieldLabelSpacing]}>
-            <Text style={[styles.fieldLabel, { color: theme.secondaryText }]}>Full Name</Text>
+            <Text style={[styles.fieldLabel, { color: theme.secondaryText }]}>
+              Full Name
+            </Text>
             {!isEditingFullName ? (
               <Pressable
                 style={({ pressed }) => [
