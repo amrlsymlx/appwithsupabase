@@ -28,6 +28,32 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
+## Deploy to Firebase Hosting
+
+This project is configured for Expo web static export and Firebase Hosting.
+
+1. Install the Firebase CLI and log in:
+
+   ```bash
+   npm install -g firebase-tools
+   firebase login
+   ```
+
+2. Create or select a Firebase project, then initialize Hosting in this repo:
+
+   ```bash
+   firebase init hosting
+   ```
+
+   Use `dist` as the public directory and do **not** enable SPA rewrites, since this app exports static route files.
+   The included `firebase.json` also runs `npm run predeploy` automatically before each Firebase deploy.
+
+3. Deploy the web build:
+
+   ```bash
+   npm run deploy-hosting
+   ```
+
 ## Supabase Storage setup for avatars
 
 Profile avatars are uploaded to a Supabase Storage bucket named `avatars`.

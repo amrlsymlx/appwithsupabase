@@ -1,0 +1,13 @@
+{
+  "hosting": {
+    "public": "dist",
+    "predeploy": [
+      "npm run predeploy"
+    ],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "node_modules/**"
+    ]
+  }
+}
