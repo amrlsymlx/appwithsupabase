@@ -1,24 +1,29 @@
 ﻿import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import RecaptchaWidget from "react-google-recaptcha";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { SIGNUP_EMAIL_REDIRECT } from "../lib/authRedirect";
+import { getRandomAvatarLibraryKey } from "../lib/avatarLibrary";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
+
+const WebRecaptchaWidget =
+  Platform.OS === "web"
+    ? (require("react-google-recaptcha").default as React.ComponentType<any>)
+    : null;
 
 const RECAPTCHA_SITE_KEY = process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY || "";
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
@@ -245,13 +250,14 @@ export default function SignUp() {
           options: {
             emailRedirectTo: SIGNUP_EMAIL_REDIRECT,
             data: {
+              avatarPath: null,
               name,
               username: normalizedEmail.split("@")[0],
               role: "user",
               phoneNumber: "N/A",
               address: "N/A",
               avatarUri: null,
-              avatarLibraryKey: null,
+              avatarLibraryKey: getRandomAvatarLibraryKey(),
             },
           },
         } as any);
@@ -680,28 +686,34 @@ export default function SignUp() {
                 {Platform.OS === "web" ? (
                   <View style={styles.recaptchaWidgetWrap}>
                     {RECAPTCHA_CONFIGURED ? (
-                      <RecaptchaWidget
-                        sitekey={RECAPTCHA_SITE_KEY}
-                        onChange={(token: string | null) => {
-                          setRecaptchaToken(token || "");
-                          setIsRecaptchaVerified(!!token);
-                          setCaptchaError("");
-                        }}
-                        onExpired={() => {
-                          setRecaptchaToken("");
-                          setIsRecaptchaVerified(false);
-                          setCaptchaError(
-                            "reCAPTCHA expired. Please verify again.",
-                          );
-                        }}
-                        onErrored={() => {
-                          setRecaptchaToken("");
-                          setIsRecaptchaVerified(false);
-                          setCaptchaError(
-                            "reCAPTCHA failed. Please try again.",
-                          );
-                        }}
-                      />
+                      WebRecaptchaWidget ? (
+                        <WebRecaptchaWidget
+                          sitekey={RECAPTCHA_SITE_KEY}
+                          onChange={(token: string | null) => {
+                            setRecaptchaToken(token || "");
+                            setIsRecaptchaVerified(!!token);
+                            setCaptchaError("");
+                          }}
+                          onExpired={() => {
+                            setRecaptchaToken("");
+                            setIsRecaptchaVerified(false);
+                            setCaptchaError(
+                              "reCAPTCHA expired. Please verify again.",
+                            );
+                          }}
+                          onErrored={() => {
+                            setRecaptchaToken("");
+                            setIsRecaptchaVerified(false);
+                            setCaptchaError(
+                              "reCAPTCHA failed. Please try again.",
+                            );
+                          }}
+                        />
+                      ) : (
+                        <Text style={styles.recaptchaHintText}>
+                          reCAPTCHA widget failed to load.
+                        </Text>
+                      )
                     ) : (
                       <Text style={styles.recaptchaHintText}>
                         Add EXPO_PUBLIC_RECAPTCHA_SITE_KEY to enable

@@ -1,27 +1,20 @@
-﻿import { bottts } from "@dicebear/collection";
-import { createAvatar } from "@dicebear/core";
-import { useFocusEffect, useRouter } from "expo-router";
+﻿import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  Animated,
-  Image,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+    Animated,
+    Image,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SvgXml } from "react-native-svg";
 import { useDashboardDrawer } from "../../components/dashboard/DrawerContext";
+import { getAvatarSource } from "../../lib/avatarLibrary";
 import { getAuthSession, updateAuthSession } from "../../lib/storage";
 import { SUPABASE_CONFIGURED, supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme";
-
-const parseLibraryKey = (key: string) => {
-  const [, suffixRaw] = key.split(":");
-  return suffixRaw || "default";
-};
 
 export default function DashboardHomeTab() {
   const router = useRouter();
@@ -34,20 +27,9 @@ export default function DashboardHomeTab() {
   const [avatarLibraryKey, setAvatarLibraryKey] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
-  const activeAvatarSeed = useMemo(() => {
-    if (avatarLibraryKey) {
-      return `${userEmail || "anonymous"}|${parseLibraryKey(avatarLibraryKey)}`;
-    }
-    return userEmail || "anonymous";
-  }, [avatarLibraryKey, userEmail]);
-
-  const avatarSvg = useMemo(
-    () =>
-      createAvatar(bottts, {
-        seed: activeAvatarSeed,
-        size: 88,
-      }).toString(),
-    [activeAvatarSeed],
+  const libraryAvatarSource = useMemo(
+    () => getAvatarSource(avatarLibraryKey, userEmail),
+    [avatarLibraryKey, userEmail],
   );
 
   const avatarOpacity = useMemo(
@@ -156,7 +138,7 @@ export default function DashboardHomeTab() {
             {avatarUri ? (
               <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
             ) : (
-              <SvgXml xml={avatarSvg} width="100%" height="100%" />
+              <Image source={libraryAvatarSource} style={styles.avatarImage} />
             )}
           </View>
         </Pressable>
@@ -183,7 +165,10 @@ export default function DashboardHomeTab() {
               {avatarUri ? (
                 <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
               ) : (
-                <SvgXml xml={avatarSvg} width="100%" height="100%" />
+                <Image
+                  source={libraryAvatarSource}
+                  style={styles.avatarImage}
+                />
               )}
             </View>
           </Pressable>

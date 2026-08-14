@@ -2,24 +2,28 @@
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import RecaptchaWidget from "react-google-recaptcha";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { deleteItem, getItem, setItem } from "../lib/storage";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
+
+const WebRecaptchaWidget =
+  Platform.OS === "web"
+    ? (require("react-google-recaptcha").default as React.ComponentType<any>)
+    : null;
 
 type RecoveryParams = {
   code: string | null;
@@ -880,24 +884,32 @@ export default function ResetPassword() {
                       Verify you are a human
                     </Text>
                     {RECAPTCHA_CONFIGURED ? (
-                      <RecaptchaWidget
-                        sitekey={RECAPTCHA_SITE_KEY}
-                        onChange={(token: string | null) => {
-                          setRecaptchaToken(token || "");
-                          setIsRecaptchaVerified(!!token);
-                          if (status) setStatus("");
-                        }}
-                        onExpired={() => {
-                          setRecaptchaToken("");
-                          setIsRecaptchaVerified(false);
-                          setStatus("reCAPTCHA expired. Please verify again.");
-                        }}
-                        onErrored={() => {
-                          setRecaptchaToken("");
-                          setIsRecaptchaVerified(false);
-                          setStatus("reCAPTCHA failed. Please try again.");
-                        }}
-                      />
+                      WebRecaptchaWidget ? (
+                        <WebRecaptchaWidget
+                          sitekey={RECAPTCHA_SITE_KEY}
+                          onChange={(token: string | null) => {
+                            setRecaptchaToken(token || "");
+                            setIsRecaptchaVerified(!!token);
+                            if (status) setStatus("");
+                          }}
+                          onExpired={() => {
+                            setRecaptchaToken("");
+                            setIsRecaptchaVerified(false);
+                            setStatus(
+                              "reCAPTCHA expired. Please verify again.",
+                            );
+                          }}
+                          onErrored={() => {
+                            setRecaptchaToken("");
+                            setIsRecaptchaVerified(false);
+                            setStatus("reCAPTCHA failed. Please try again.");
+                          }}
+                        />
+                      ) : (
+                        <Text style={styles.errorText}>
+                          reCAPTCHA widget failed to load.
+                        </Text>
+                      )
                     ) : null}
                   </View>
                 ) : (

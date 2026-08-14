@@ -1,38 +1,32 @@
-﻿import { bottts } from "@dicebear/collection";
-import { createAvatar } from "@dicebear/core";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+﻿import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { decode as decodeBase64 } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Linking,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
-import { SvgXml } from "react-native-svg";
+import {
+    AVATAR_LIBRARY_OPTIONS,
+    getAvatarOptionByKey,
+    getAvatarSource,
+    normalizeAvatarLibraryKey,
+} from "../../lib/avatarLibrary";
 import { getAuthSession, updateAuthSession } from "../../lib/storage";
 import { SUPABASE_CONFIGURED, supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme";
-
-const AVATAR_LIBRARY_OPTIONS = [
-  { key: "pixelbot:scout", label: "Scout" },
-  { key: "pixelbot:nova", label: "Nova" },
-  { key: "pixelbot:blaze", label: "Blaze" },
-  { key: "pixelbot:echo", label: "Echo" },
-  { key: "pixelbot:orbit", label: "Orbit" },
-  { key: "pixelbot:glitch", label: "Glitch" },
-] as const;
 
 type PendingAvatarAction = "gallery" | "camera" | null;
 
@@ -95,25 +89,14 @@ export default function EditProfileScreen() {
     router.replace("/dashboard/settings");
   };
 
-  const parseLibraryKey = (key: string) => {
-    const [, suffixRaw] = key.split(":");
-    return suffixRaw || "default";
-  };
+  const normalizedAvatarLibraryKey = useMemo(
+    () => normalizeAvatarLibraryKey(avatarLibraryKey),
+    [avatarLibraryKey],
+  );
 
-  const activeAvatarSeed = useMemo(() => {
-    if (avatarLibraryKey) {
-      return `${email || "anonymous"}|${parseLibraryKey(avatarLibraryKey)}`;
-    }
-    return email || "anonymous";
-  }, [avatarLibraryKey, email]);
-
-  const buildAvatarSvg = (seed: string, size: number) => {
-    return createAvatar(bottts, { seed, size }).toString();
-  };
-
-  const avatarSvg = useMemo(
-    () => buildAvatarSvg(activeAvatarSeed, 120),
-    [activeAvatarSeed],
+  const currentLibraryAvatarSource = useMemo(
+    () => getAvatarSource(normalizedAvatarLibraryKey, email),
+    [normalizedAvatarLibraryKey, email],
   );
 
   const saveAvatarUri = async (nextUri: string) => {
@@ -537,7 +520,8 @@ export default function EditProfileScreen() {
       let nextUsername = session.username || "N/A";
       let nextRole = session.role || "user";
       let nextAvatarPath = session.avatarPath || null;
-      let nextAvatarLibraryKey = session.avatarLibraryKey || null;
+      let nextAvatarLibraryKey =
+        normalizeAvatarLibraryKey(session.avatarLibraryKey) || null;
 
       setEmail(nextEmail);
 
@@ -565,7 +549,7 @@ export default function EditProfileScreen() {
         }
 
         const avatarPath = meta.avatarPath || nextAvatarPath || null;
-        const avatarLibKey = meta.avatarLibraryKey || null;
+        const avatarLibKey = normalizeAvatarLibraryKey(meta.avatarLibraryKey);
         if (avatarLibKey) {
           nextAvatarLibraryKey = avatarLibKey;
           nextAvatarPath = null;
@@ -794,8 +778,8 @@ export default function EditProfileScreen() {
                 {AVATAR_LIBRARY_OPTIONS.map((item) => {
                   const selected = pendingLibraryKey
                     ? pendingLibraryKey === item.key
-                    : avatarLibraryKey === item.key;
-                  const seed = `${email || "anonymous"}|${parseLibraryKey(item.key)}`;
+                    : normalizedAvatarLibraryKey === item.key;
+                  const option = getAvatarOptionByKey(item.key);
 
                   return (
                     <Pressable
@@ -820,10 +804,9 @@ export default function EditProfileScreen() {
                       disabled={updatingAvatar}
                     >
                       <View style={styles.avatarLibraryPreviewFrame}>
-                        <SvgXml
-                          xml={buildAvatarSvg(seed, 56)}
-                          width="100%"
-                          height="100%"
+                        <Image
+                          source={option?.source || currentLibraryAvatarSource}
+                          style={styles.avatarImage}
                         />
                       </View>
                       <Text
@@ -895,7 +878,10 @@ export default function EditProfileScreen() {
                     style={styles.avatarImage}
                   />
                 ) : (
-                  <SvgXml xml={avatarSvg} width="100%" height="100%" />
+                  <Image
+                    source={currentLibraryAvatarSource}
+                    style={styles.avatarImage}
+                  />
                 )}
               </View>
 

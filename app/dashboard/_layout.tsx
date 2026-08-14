@@ -1,26 +1,24 @@
-import { bottts } from "@dicebear/collection";
-import { createAvatar } from "@dicebear/core";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs, useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
-  Animated,
-  Image,
-  PanResponder,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
+    Animated,
+    Image,
+    PanResponder,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SvgXml } from "react-native-svg";
 import { DashboardDrawerContext } from "../../components/dashboard/DrawerContext";
+import { getAvatarSource } from "../../lib/avatarLibrary";
 import {
-  clearAuthSession,
-  getAuthSession,
-  updateAuthSession,
+    clearAuthSession,
+    getAuthSession,
+    updateAuthSession,
 } from "../../lib/storage";
 import { supabase, SUPABASE_CONFIGURED } from "../../lib/supabase";
 import { ThemeToggle, useTheme } from "../../lib/theme";
@@ -30,11 +28,6 @@ const DRAWER_RADIUS = 30;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
-
-const parseLibraryKey = (key: string) => {
-  const [, suffixRaw] = key.split(":");
-  return suffixRaw || "default";
-};
 
 export default function DashboardTabsLayout() {
   const { theme } = useTheme();
@@ -57,20 +50,9 @@ export default function DashboardTabsLayout() {
   const drawerContentTop = Math.max(56, insets.top + 48);
   const drawerContentLift = Math.round(height * 0.25);
 
-  const activeAvatarSeed = useMemo(() => {
-    if (avatarLibraryKey) {
-      return `${userEmail || "anonymous"}|${parseLibraryKey(avatarLibraryKey)}`;
-    }
-    return userEmail || "anonymous";
-  }, [avatarLibraryKey, userEmail]);
-
-  const avatarSvg = useMemo(
-    () =>
-      createAvatar(bottts, {
-        seed: activeAvatarSeed,
-        size: 88,
-      }).toString(),
-    [activeAvatarSeed],
+  const libraryAvatarSource = useMemo(
+    () => getAvatarSource(avatarLibraryKey, userEmail),
+    [avatarLibraryKey, userEmail],
   );
 
   const pageTranslateX = useMemo(
@@ -283,7 +265,10 @@ export default function DashboardTabsLayout() {
                       style={styles.avatarImage}
                     />
                   ) : (
-                    <SvgXml xml={avatarSvg} width="100%" height="100%" />
+                    <Image
+                      source={libraryAvatarSource}
+                      style={styles.avatarImage}
+                    />
                   )}
                 </View>
                 <Text

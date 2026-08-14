@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { SIGNUP_EMAIL_REDIRECT } from "../lib/authRedirect";
+import { normalizeAvatarLibraryKey } from "../lib/avatarLibrary";
 import {
   clearRememberedCredentials,
   getRememberedCredentials,
@@ -22,8 +23,6 @@ import {
 } from "../lib/storage";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
 
 type EmailVerificationParams = {
   code: string | null;
@@ -103,11 +102,8 @@ const firebaseConfig = {
   storageBucket: "test1-372014.firebasestorage.app",
   messagingSenderId: "598006122059",
   appId: "1:598006122059:web:49cfab1596d7102964afce",
-  measurementId: "G-TV1G2VXW01"
+  measurementId: "G-TV1G2VXW01",
 };
-
-const app = initializeApp(firebaseConfig);
-getAnalytics(app);
 
 export default function Index() {
   const router = useRouter();
@@ -125,6 +121,32 @@ export default function Index() {
   const [resendingVerification, setResendingVerification] = useState(false);
   const [verificationBanner, setVerificationBanner] =
     useState<VerificationBannerState | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      return;
+    }
+
+    const initAnalytics = async () => {
+      try {
+        const [{ getApps, initializeApp }, { getAnalytics, isSupported }] =
+          await Promise.all([
+            import("firebase/app"),
+            import("firebase/analytics"),
+          ]);
+        const app = getApps().length
+          ? getApps()[0]
+          : initializeApp(firebaseConfig);
+        if (await isSupported()) {
+          getAnalytics(app);
+        }
+      } catch {
+        // Ignore analytics init errors so auth flow can still render.
+      }
+    };
+
+    void initAnalytics();
+  }, []);
 
   const handleLogin = async () => {
     setEmailTouched(true);
@@ -164,8 +186,9 @@ export default function Index() {
             userMetadata?.username || normalizedEmail.split("@")[0] || "N/A";
           const signedInRole = userMetadata?.role || "user";
           const signedInAvatarPath = userMetadata?.avatarPath || null;
-          const signedInAvatarLibraryKey =
-            userMetadata?.avatarLibraryKey || null;
+          const signedInAvatarLibraryKey = normalizeAvatarLibraryKey(
+            userMetadata?.avatarLibraryKey,
+          );
 
           // Prefer predefined avatar selections over uploaded avatar paths
           let signedInAvatarUri: string | null = null;
