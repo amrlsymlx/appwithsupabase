@@ -1,13 +1,13 @@
 ﻿import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
-    Animated,
-    Image,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Animated,
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDashboardDrawer } from "../../components/dashboard/DrawerContext";
@@ -129,12 +129,7 @@ export default function DashboardHomeTab() {
           ]}
           hitSlop={8}
         >
-          <View
-            style={[
-              styles.avatarWrap,
-              { backgroundColor: theme.inputBackground },
-            ]}
-          >
+          <View style={[styles.avatarWrap, { backgroundColor: theme.surface }]}>
             {avatarUri ? (
               <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
             ) : (
@@ -157,10 +152,7 @@ export default function DashboardHomeTab() {
             hitSlop={8}
           >
             <View
-              style={[
-                styles.avatarWrap,
-                { backgroundColor: theme.inputBackground },
-              ]}
+              style={[styles.avatarWrap, { backgroundColor: theme.surface }]}
             >
               {avatarUri ? (
                 <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
@@ -200,8 +192,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 10,
     zIndex: 20,
-    width: 46,
-    height: 46,
+    width: 52,
+    height: 52,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
@@ -212,15 +204,17 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   avatarWrap: {
-    width: 40,
-    height: 40,
+    width: 46,
+    height: 46,
     borderRadius: 999,
     overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatarImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
+    width: 33,
+    height: 33,
+    resizeMode: "contain",
   },
   contentArea: {
     flex: 1,

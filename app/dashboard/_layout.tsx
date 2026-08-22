@@ -2,23 +2,23 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs, useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
-    Animated,
-    Image,
-    PanResponder,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    useWindowDimensions,
-    View,
+  Animated,
+  Image,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DashboardDrawerContext } from "../../components/dashboard/DrawerContext";
 import { getAvatarSource } from "../../lib/avatarLibrary";
 import {
-    clearAuthSession,
-    getAuthSession,
-    updateAuthSession,
+  clearAuthSession,
+  getAuthSession,
+  updateAuthSession,
 } from "../../lib/storage";
 import { supabase, SUPABASE_CONFIGURED } from "../../lib/supabase";
 import { ThemeToggle, useTheme } from "../../lib/theme";
@@ -256,7 +256,7 @@ export default function DashboardTabsLayout() {
                 <View
                   style={[
                     styles.drawerAvatarWrap,
-                    { backgroundColor: theme.inputBackground },
+                    { backgroundColor: theme.surface },
                   ]}
                 >
                   {avatarUri ? (
@@ -499,11 +499,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     overflow: "hidden",
     marginBottom: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatarImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
+    width: 28,
+    height: 28,
+    resizeMode: "contain",
   },
   drawerName: {
     fontSize: 22,

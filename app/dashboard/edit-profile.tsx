@@ -5,24 +5,24 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Linking,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import {
-    AVATAR_LIBRARY_OPTIONS,
-    getAvatarOptionByKey,
-    getAvatarSource,
-    normalizeAvatarLibraryKey,
+  AVATAR_LIBRARY_OPTIONS,
+  getAvatarOptionByKey,
+  getAvatarSource,
+  normalizeAvatarLibraryKey,
 } from "../../lib/avatarLibrary";
 import { getAuthSession, updateAuthSession } from "../../lib/storage";
 import { SUPABASE_CONFIGURED, supabase } from "../../lib/supabase";
@@ -803,7 +803,15 @@ export default function EditProfileScreen() {
                       onPress={() => setPendingLibraryKey(item.key)}
                       disabled={updatingAvatar}
                     >
-                      <View style={styles.avatarLibraryPreviewFrame}>
+                      <View
+                        style={[
+                          styles.avatarLibraryPreviewFrame,
+                          {
+                            backgroundColor:
+                              theme.name === "dark" ? "#111827" : "#f8fbff",
+                          },
+                        ]}
+                      >
                         <Image
                           source={option?.source || currentLibraryAvatarSource}
                           style={styles.avatarImage}
@@ -871,7 +879,9 @@ export default function EditProfileScreen() {
         >
           <View style={styles.profileAvatarRow}>
             <View style={styles.avatarShell}>
-              <View style={styles.avatarFrame}>
+              <View
+                style={[styles.avatarFrame, { backgroundColor: theme.surface }]}
+              >
                 {avatarUri ? (
                   <Image
                     source={{ uri: avatarUri }}
@@ -1372,8 +1382,9 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 999,
     overflow: "hidden",
-    backgroundColor: "#f3f4f6",
     position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
   },
   editIconButton: {
     position: "absolute",
@@ -1477,9 +1488,9 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   avatarImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
+    width: 84,
+    height: 84,
+    resizeMode: "contain",
   },
   avatarActionsRow: {
     width: "100%",
@@ -1538,6 +1549,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#e5e7eb",
     marginBottom: 6,
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatarLibraryItemText: {
     fontSize: 12,
