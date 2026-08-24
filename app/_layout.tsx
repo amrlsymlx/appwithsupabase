@@ -1,7 +1,9 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { Stack, usePathname } from "expo-router";
+import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
+import { logScreenView } from "../lib/analytics";
 import { ThemeProvider, ThemeToggle } from "../lib/theme";
 
 export default function RootLayout() {
@@ -12,6 +14,10 @@ export default function RootLayout() {
     pathname === "/sign-up" ||
     pathname === "/forgot-password" ||
     pathname === "/reset-password";
+
+  useEffect(() => {
+    logScreenView(pathname);
+  }, [pathname]);
 
   if (!fontsLoaded) {
     return null;

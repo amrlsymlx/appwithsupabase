@@ -8,12 +8,12 @@
     "scheme": "vcode",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "ios": {
       "icon": "./assets/AppIcons/appstore.png",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.TestApp",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
-
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
@@ -21,21 +21,14 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.TestApp"
+      "package": "com.anonymous.TestApp",
+      "googleServicesFile": "./google-services.json"
     },
-
     "web": {
       "name": "Syamil Test",
       "output": "static",
-      "favicon": "./assets/AppIcons/appstore.png",
-      "index": {
-        "head": [
-          "<script async src='https://www.googletagmanager.com/gtag/js?id=G-TV1G2VXW01'></script>",
-          "<script>window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'G-TV1G2VXW01');</script>"
-        ]
-      }
+      "favicon": "./assets/AppIcons/appstore.png"
     },
-
     "plugins": [
       "expo-router",
       [
@@ -50,9 +43,10 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-firebase/app",
+      "@react-native-firebase/analytics"
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
