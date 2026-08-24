@@ -14,13 +14,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DashboardDrawerContext } from "../../components/dashboard/DrawerContext";
+import { DashboardProfileContext } from "../../components/dashboard/ProfileContext";
 import { getAvatarSource } from "../../lib/avatarLibrary";
-import {
-  clearAuthSession,
-  getAuthSession,
-  updateAuthSession,
-} from "../../lib/storage";
-import { supabase, SUPABASE_CONFIGURED } from "../../lib/supabase";
+import { loadProfile, Profile } from "../../lib/profile";
+import { clearAuthSession } from "../../lib/storage";
+import { supabase } from "../../lib/supabase";
 import { ThemeToggle, useTheme } from "../../lib/theme";
 
 const PREVIEW_PORTION = 0.1;
@@ -35,10 +33,7 @@ export default function DashboardTabsLayout() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
-  const [userName, setUserName] = useState("");
-  const [userEmail, setUserEmail] = useState("");
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
-  const [avatarLibraryKey, setAvatarLibraryKey] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const progress = useRef(new Animated.Value(0)).current;
@@ -51,8 +46,8 @@ export default function DashboardTabsLayout() {
   const drawerContentLift = Math.round(height * 0.25);
 
   const libraryAvatarSource = useMemo(
-    () => getAvatarSource(avatarLibraryKey, userEmail),
-    [avatarLibraryKey, userEmail],
+    () => getAvatarSource(profile?.avatarLibraryKey, profile?.email),
+    [profile?.avatarLibraryKey, profile?.email],
   );
 
   const pageTranslateX = useMemo(
@@ -130,73 +125,30 @@ export default function DashboardTabsLayout() {
     });
   }, [openTranslateX, progress]);
 
+  const mountedRef = useRef(true);
+
+  const refreshProfile = useCallback(async () => {
+    const nextProfile = await loadProfile();
+
+    if (!nextProfile) {
+      router.replace("/");
+      return;
+    }
+
+    if (mountedRef.current) {
+      setProfile(nextProfile);
+    }
+  }, [router]);
+
   useFocusEffect(
     useCallback(() => {
-      let mounted = true;
-
-      const loadSession = async () => {
-        const session = await getAuthSession();
-        if (!session?.authenticated) {
-          router.replace("/");
-          return;
-        }
-
-        if (!mounted) {
-          return;
-        }
-
-        setUserName(session.name || "");
-        setUserEmail(session.email || "");
-        setAvatarLibraryKey(session.avatarLibraryKey || null);
-
-        let freshAvatarUri = session.avatarUri || null;
-        if (SUPABASE_CONFIGURED && supabase) {
-          const { data: userData } = await supabase.auth.getUser();
-          const meta = userData?.user?.user_metadata || {};
-          const avatarPath = meta.avatarPath || session.avatarPath || null;
-          const avatarLibKey = meta.avatarLibraryKey || null;
-
-          if (avatarLibKey) {
-            freshAvatarUri = null;
-            setAvatarLibraryKey(avatarLibKey);
-            await updateAuthSession({
-              avatarUri: null,
-              avatarPath: null,
-              avatarLibraryKey: avatarLibKey,
-            });
-          } else if (avatarPath) {
-            const { data: signedUrlData } = await supabase.storage
-              .from("avatars")
-              .createSignedUrl(avatarPath, 3600);
-            freshAvatarUri = signedUrlData?.signedUrl || null;
-            setAvatarLibraryKey(null);
-            await updateAuthSession({
-              avatarUri: freshAvatarUri,
-              avatarPath,
-              avatarLibraryKey: null,
-            });
-          } else {
-            freshAvatarUri = null;
-            setAvatarLibraryKey(null);
-            await updateAuthSession({
-              avatarUri: null,
-              avatarPath: null,
-              avatarLibraryKey: null,
-            });
-          }
-        }
-
-        if (mounted) {
-          setAvatarUri(freshAvatarUri);
-        }
-      };
-
-      void loadSession();
+      mountedRef.current = true;
+      void refreshProfile();
 
       return () => {
-        mounted = false;
+        mountedRef.current = false;
       };
-    }, [router]),
+    }, [refreshProfile]),
   );
 
   const drawerContextValue = useMemo(
@@ -209,7 +161,13 @@ export default function DashboardTabsLayout() {
     [progress],
   );
 
+  const profileContextValue = useMemo(
+    () => ({ profile, refresh: refreshProfile }),
+    [profile, refreshProfile],
+  );
+
   return (
+    <DashboardProfileContext.Provider value={profileContextValue}>
     <DashboardDrawerContext.Provider value={drawerContextValue}>
       <View style={[styles.root, { backgroundColor: theme.surface }]}>
         <View
@@ -259,29 +217,26 @@ export default function DashboardTabsLayout() {
                     { backgroundColor: theme.surface },
                   ]}
                 >
-                  {avatarUri ? (
-                    <Image
-                      source={{ uri: avatarUri }}
-                      style={styles.avatarImage}
-                    />
-                  ) : (
-                    <Image
-                      source={libraryAvatarSource}
-                      style={styles.avatarImage}
-                    />
-                  )}
+                  <Image
+                    source={
+                      profile?.avatarUri
+                        ? { uri: profile.avatarUri }
+                        : libraryAvatarSource
+                    }
+                    style={styles.avatarImage}
+                  />
                 </View>
                 <Text
                   style={[styles.drawerName, { color: theme.text }]}
                   numberOfLines={1}
                 >
-                  {userName || "Welcome"}
+                  {profile?.name || "Welcome"}
                 </Text>
                 <Text
                   style={[styles.drawerEmail, { color: theme.secondaryText }]}
                   numberOfLines={1}
                 >
-                  {userEmail || ""}
+                  {profile?.email || ""}
                 </Text>
               </View>
 
@@ -449,6 +404,7 @@ export default function DashboardTabsLayout() {
         ) : null}
       </View>
     </DashboardDrawerContext.Provider>
+    </DashboardProfileContext.Provider>
   );
 }
 

@@ -1,4 +1,4 @@
-﻿import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -14,15 +14,18 @@ import {
   View,
 } from "react-native";
 import { SIGNUP_EMAIL_REDIRECT } from "../lib/authRedirect";
-import { normalizeAvatarLibraryKey } from "../lib/avatarLibrary";
+import { getAuthPersistence, setAuthPersistence } from "../lib/authStorage";
 import {
-  clearRememberedCredentials,
-  getRememberedCredentials,
-  setAuthSession,
-  setRememberedCredentials,
-} from "../lib/storage";
+  authStyles,
+  getFormCardStyle,
+  getInputStyle,
+  getPlaceholderColor,
+} from "../lib/formStyles";
+import { buildProfileFromUser, persistProfile } from "../lib/profile";
+import { purgeLegacyRememberedCredentials } from "../lib/storage";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
+import { validateEmail, validateSignInPassword } from "../lib/validation";
 
 type EmailVerificationParams = {
   code: string | null;
@@ -80,6 +83,13 @@ const extractEmailVerificationParams = (
   };
 };
 
+const isVerificationUrl = (params: EmailVerificationParams) =>
+  params.type === "signup" ||
+  Boolean(params.code) ||
+  Boolean(params.tokenHash) ||
+  Boolean(params.accessToken && params.refreshToken) ||
+  Boolean(params.errorCode || params.errorDescription);
+
 const shouldOfferVerificationResend = (
   errorCode: string | null,
   errorDescription: string | null,
@@ -93,16 +103,6 @@ const clearProcessedAuthUrl = () => {
   }
 
   window.history.replaceState({}, document.title, window.location.pathname);
-};
-
-const firebaseConfig = {
-  apiKey: "AIzaSyAjmuDmGGRUF--md7T9un7vQgpLTLp4x3Y",
-  authDomain: "test1-372014.firebaseapp.com",
-  projectId: "test1-372014",
-  storageBucket: "test1-372014.firebasestorage.app",
-  messagingSenderId: "598006122059",
-  appId: "1:598006122059:web:49cfab1596d7102964afce",
-  measurementId: "G-TV1G2VXW01",
 };
 
 export default function Index() {
@@ -122,41 +122,23 @@ export default function Index() {
   const [verificationBanner, setVerificationBanner] =
     useState<VerificationBannerState | null>(null);
 
-  useEffect(() => {
-    if (Platform.OS !== "web") {
-      return;
-    }
-
-    const initAnalytics = async () => {
-      try {
-        const [{ getApps, initializeApp }, { getAnalytics, isSupported }] =
-          await Promise.all([
-            import("firebase/app"),
-            import("firebase/analytics"),
-          ]);
-        const app = getApps().length
-          ? getApps()[0]
-          : initializeApp(firebaseConfig);
-        if (await isSupported()) {
-          getAnalytics(app);
-        }
-      } catch {
-        // Ignore analytics init errors so auth flow can still render.
-      }
-    };
-
-    void initAnalytics();
-  }, []);
+  const formValid = validateEmail(email) && validateSignInPassword(password);
+  const emailError = emailTouched && !validateEmail(email);
 
   const handleLogin = async () => {
     setEmailTouched(true);
     setError("");
 
-    const isEmailValid = validateEmail(email);
-    const isPasswordValid = validatePassword(password);
-
-    if (!isEmailValid || !isPasswordValid) {
+    if (!validateEmail(email) || !validateSignInPassword(password)) {
       setError("Please fix validation errors before signing in.");
+      return;
+    }
+
+    if (!SUPABASE_CONFIGURED || !supabase) {
+      Alert.alert(
+        "Supabase not configured",
+        "Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env before signing in.",
+      );
       return;
     }
 
@@ -164,93 +146,40 @@ export default function Index() {
     try {
       const normalizedEmail = email.trim();
 
-      if (SUPABASE_CONFIGURED && supabase) {
-        const { data, error } = await supabase.auth.signInWithPassword({
+      // Decided before signing in so the refresh token is written to the
+      // right place: persistent storage, or memory only.
+      await setAuthPersistence(keepSignedIn);
+
+      const { data, error: signInError } =
+        await supabase.auth.signInWithPassword({
           email: normalizedEmail,
           password,
-        } as any);
+        });
 
-        if (error) {
-          setError(error.message || "Sign-in failed");
-        } else {
-          const userMetadata =
-            (data as any)?.user?.user_metadata ||
-            (data as any)?.session?.user?.user_metadata ||
-            {};
-          const signedInName =
-            userMetadata?.name || userMetadata?.full_name || "";
-          const signedInPhoneNumber =
-            userMetadata?.phoneNumber || userMetadata?.phone_number || "N/A";
-          const signedInAddress = userMetadata?.address || "N/A";
-          const signedInUsername =
-            userMetadata?.username || normalizedEmail.split("@")[0] || "N/A";
-          const signedInRole = userMetadata?.role || "user";
-          const signedInAvatarPath = userMetadata?.avatarPath || null;
-          const signedInAvatarLibraryKey = normalizeAvatarLibraryKey(
-            userMetadata?.avatarLibraryKey,
-          );
-
-          // Prefer predefined avatar selections over uploaded avatar paths
-          let signedInAvatarUri: string | null = null;
-          if (!signedInAvatarLibraryKey && signedInAvatarPath && supabase) {
-            const { data: signedUrlData } = await supabase.storage
-              .from("avatars")
-              .createSignedUrl(signedInAvatarPath, 3600);
-            signedInAvatarUri = signedUrlData?.signedUrl || null;
-          }
-
-          await setAuthSession(
-            {
-              email: normalizedEmail,
-              name: signedInName,
-              phoneNumber: signedInPhoneNumber,
-              address: signedInAddress,
-              username: signedInUsername,
-              role: signedInRole,
-              avatarUri: signedInAvatarUri,
-              avatarPath: signedInAvatarPath,
-              avatarLibraryKey: signedInAvatarLibraryKey,
-            },
-            keepSignedIn,
-          );
-          if (keepSignedIn) {
-            await setRememberedCredentials({
-              email: normalizedEmail,
-              password,
-            });
-          } else {
-            await clearRememberedCredentials();
-          }
-          setEmail("");
-          setPassword("");
-          setEmailTouched(false);
-          router.replace("/dashboard" as any);
-        }
-      } else {
-        Alert.alert(
-          "Supabase not configured",
-          "Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env before signing in.",
-        );
+      if (signInError) {
+        setError(signInError.message || "Sign-in failed");
+        return;
       }
+
+      const user = data.user ?? data.session?.user;
+      if (!user) {
+        setError("Sign-in failed");
+        return;
+      }
+
+      const profile = await buildProfileFromUser(user);
+      await persistProfile(profile, keepSignedIn);
+
+      setEmail("");
+      setPassword("");
+      setEmailTouched(false);
+      router.replace("/dashboard");
     } catch (err: any) {
       setError(err?.message || "Sign-in failed");
     } finally {
       setLoading(false);
     }
   };
-
-  const validateEmail = (e: string) => {
-    if (!e) return false;
-    return /\S+@\S+\.\S+/.test(e);
-  };
-
-  const validatePassword = (p: string) => {
-    if (!p) return false;
-    return p.length >= 6;
-  };
-
-  const formValid = validateEmail(email) && validatePassword(password);
-  const emailError = emailTouched && !validateEmail(email);
 
   const handleResendVerification = async () => {
     setEmailTouched(true);
@@ -310,20 +239,61 @@ export default function Index() {
     });
   };
 
+  // Restores a persisted Supabase session so "Keep me signed in" goes straight
+  // to the dashboard instead of re-asking for a password.
   useEffect(() => {
-    const loadSession = async () => {
-      const remembered = await getRememberedCredentials();
-      if (remembered) {
-        setEmail(remembered.email);
-        setPassword(remembered.password);
-        setKeepSignedIn(true);
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      await purgeLegacyRememberedCredentials();
+
+      const persistenceEnabled = await getAuthPersistence();
+      if (!cancelled) {
+        setKeepSignedIn(persistenceEnabled);
       }
 
-      setCheckingSession(false);
+      if (!SUPABASE_CONFIGURED || !supabase) {
+        if (!cancelled) {
+          setCheckingSession(false);
+        }
+        return;
+      }
+
+      // A verification link is handled by the effect below, which signs the
+      // user back out; do not race it into the dashboard.
+      const urlToParse = currentUrl ?? (await Linking.getInitialURL());
+      if (urlToParse && isVerificationUrl(extractEmailVerificationParams(urlToParse))) {
+        if (!cancelled) {
+          setCheckingSession(false);
+        }
+        return;
+      }
+
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user;
+      if (!user) {
+        if (!cancelled) {
+          setCheckingSession(false);
+        }
+        return;
+      }
+
+      const profile = await buildProfileFromUser(user);
+      await persistProfile(profile, true);
+
+      if (!cancelled) {
+        router.replace("/dashboard");
+      }
     };
 
-    loadSession();
-  }, [router]);
+    void restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+    // Runs once on mount; the verification effect owns later URL changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const handleEmailVerification = async () => {
@@ -338,26 +308,19 @@ export default function Index() {
         return;
       }
 
+      const params = extractEmailVerificationParams(urlToParse);
+      if (!isVerificationUrl(params)) {
+        return;
+      }
+
       const {
         code,
         tokenHash,
-        type,
         accessToken,
         refreshToken,
         errorCode,
         errorDescription,
-      } = extractEmailVerificationParams(urlToParse);
-
-      const isVerificationUrl =
-        type === "signup" ||
-        Boolean(code) ||
-        Boolean(tokenHash) ||
-        Boolean(accessToken && refreshToken) ||
-        Boolean(errorCode || errorDescription);
-
-      if (!isVerificationUrl) {
-        return;
-      }
+      } = params;
 
       processedVerificationUrlRef.current = urlToParse;
       clearProcessedAuthUrl();
@@ -366,32 +329,36 @@ export default function Index() {
 
       if (errorDescription) {
         verificationError = errorDescription;
-      }
-
-      if (!verificationError && code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) {
-          verificationError = error.message || "Unable to verify email.";
+      } else if (code) {
+        const { error: exchangeError } =
+          await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) {
+          // The client may have already consumed the code from the URL, in
+          // which case a live session means verification did succeed.
+          const { data } = await supabase.auth.getSession();
+          if (!data.session) {
+            verificationError = exchangeError.message || "Unable to verify email.";
+          }
         }
-      } else if (!verificationError && tokenHash) {
-        const { error } = await supabase.auth.verifyOtp({
+      } else if (tokenHash) {
+        const { error: otpError } = await supabase.auth.verifyOtp({
           token_hash: tokenHash,
           type: "signup",
         });
-        if (error) {
-          verificationError = error.message || "Unable to verify email.";
+        if (otpError) {
+          verificationError = otpError.message || "Unable to verify email.";
         }
-      } else if (!verificationError && accessToken && refreshToken) {
-        const { error } = await supabase.auth.setSession({
+      } else if (accessToken && refreshToken) {
+        const { error: sessionError } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
         });
-        if (error) {
-          verificationError = error.message || "Unable to verify email.";
+        if (sessionError) {
+          verificationError = sessionError.message || "Unable to verify email.";
         }
-      } else if (!verificationError) {
-        // Some providers redirect back with type=signup but without verifiable tokens.
-        // Do not show a false failure toast in that case.
+      } else {
+        // Some providers redirect back with type=signup but without verifiable
+        // tokens. Do not show a false failure in that case.
         return;
       }
 
@@ -418,58 +385,47 @@ export default function Index() {
     };
 
     void handleEmailVerification();
-  }, [currentUrl, router]);
+  }, [currentUrl]);
 
   if (checkingSession) {
     return null;
   }
 
+  const inputStyle = [authStyles.input, getInputStyle(theme)];
+  const placeholderColor = getPlaceholderColor(theme);
+
   return (
     <KeyboardAvoidingView
-      style={[styles.keyboardView, { backgroundColor: theme.background }]}
+      style={[authStyles.keyboardView, { backgroundColor: theme.background }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
     >
       <ScrollView
-        style={[styles.scrollView, { backgroundColor: theme.background }]}
-        contentContainerStyle={styles.scrollContent}
+        style={[authStyles.scrollView, { backgroundColor: theme.background }]}
+        contentContainerStyle={authStyles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View
-          style={[
-            styles.container,
-            { backgroundColor: theme.background, paddingTop: 80 },
-          ]}
+          style={[authStyles.container, { backgroundColor: theme.background }]}
         >
-          <View
-            style={[
-              styles.formCard,
-              {
-                backgroundColor:
-                  theme.name === "dark"
-                    ? "rgba(31, 41, 55, 0.72)"
-                    : "rgba(255, 255, 255, 0.95)",
-                borderWidth: Platform.OS === "android" ? 0 : 1,
-                borderColor:
-                  Platform.OS === "android"
-                    ? "transparent"
-                    : "rgba(255, 255, 255, 0.25)",
-              },
-            ]}
-          >
-            <View style={styles.heroWrap}>
-              <Text style={[styles.title, { color: theme.text }]}>
+          <View style={[authStyles.formCard, getFormCardStyle(theme)]}>
+            <View style={authStyles.heroWrap}>
+              <Text style={[authStyles.title, { color: theme.text }]}>
                 Welcome back
               </Text>
-              <Text style={[styles.subtitle, { color: theme.secondaryText }]}>
+              <Text
+                style={[authStyles.subtitle, { color: theme.secondaryText }]}
+              >
                 Sign in to continue
               </Text>
             </View>
 
             {!SUPABASE_CONFIGURED ? (
-              <View style={styles.banner}>
-                <Text style={[styles.bannerText, { color: theme.bannerText }]}>
+              <View style={authStyles.banner}>
+                <Text
+                  style={[authStyles.bannerText, { color: theme.bannerText }]}
+                >
                   Supabase is not configured. Add `EXPO_PUBLIC_SUPABASE_URL` and
                   `EXPO_PUBLIC_SUPABASE_ANON_KEY` to .env and restart the app.
                 </Text>
@@ -497,23 +453,8 @@ export default function Index() {
             ) : null}
 
             <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor:
-                    theme.name === "dark"
-                      ? "rgba(17, 24, 39, 0.85)"
-                      : "rgba(255, 255, 255, 0.95)",
-                  borderColor:
-                    theme.name === "dark"
-                      ? "rgba(255, 255, 255, 0.14)"
-                      : "rgba(15, 23, 42, 0.1)",
-                  color: theme.name === "dark" ? "#f9fafb" : "#111827",
-                },
-              ]}
-              placeholderTextColor={
-                theme.name === "dark" ? "#cbd5e1" : "#6b7280"
-              }
+              style={inputStyle}
+              placeholderTextColor={placeholderColor}
               placeholder="Email"
               value={email}
               onChangeText={(t) => {
@@ -525,7 +466,7 @@ export default function Index() {
               autoCapitalize="none"
             />
             {emailError ? (
-              <Text style={styles.fieldError}>
+              <Text style={authStyles.fieldError}>
                 {email ? "Enter a valid email address" : "Email is required"}
               </Text>
             ) : null}
@@ -533,15 +474,15 @@ export default function Index() {
             {verificationBanner?.allowResend ? (
               <Pressable
                 style={({ pressed }) => [
-                  styles.secondaryActionButton,
+                  authStyles.secondaryButton,
                   (resendingVerification || !SUPABASE_CONFIGURED) &&
-                    styles.secondaryActionButtonDisabled,
-                  pressed && styles.secondaryButtonPressed,
+                    authStyles.secondaryButtonDisabled,
+                  pressed && authStyles.secondaryButtonPressed,
                 ]}
                 onPress={handleResendVerification}
                 disabled={resendingVerification || !SUPABASE_CONFIGURED}
               >
-                <Text style={styles.secondaryActionButtonText}>
+                <Text style={authStyles.secondaryButtonText}>
                   {resendingVerification
                     ? "Sending new link..."
                     : "Request new verification link"}
@@ -549,28 +490,10 @@ export default function Index() {
               </Pressable>
             ) : null}
 
-            <View style={styles.passwordRow}>
+            <View style={authStyles.passwordRow}>
               <TextInput
-                style={[
-                  styles.input,
-                  {
-                    flex: 1,
-                    marginRight: 8,
-                    marginBottom: 0,
-                    backgroundColor:
-                      theme.name === "dark"
-                        ? "rgba(17, 24, 39, 0.85)"
-                        : "rgba(255, 255, 255, 0.95)",
-                    borderColor:
-                      theme.name === "dark"
-                        ? "rgba(255, 255, 255, 0.14)"
-                        : "rgba(15, 23, 42, 0.1)",
-                    color: theme.name === "dark" ? "#f9fafb" : "#111827",
-                  },
-                ]}
-                placeholderTextColor={
-                  theme.name === "dark" ? "#cbd5e1" : "#6b7280"
-                }
+                style={[...inputStyle, authStyles.passwordInput]}
+                placeholderTextColor={placeholderColor}
                 placeholder="Password"
                 value={password}
                 onChangeText={(t) => {
@@ -599,7 +522,7 @@ export default function Index() {
             <Pressable
               style={({ pressed }) => [
                 styles.forgotPasswordButton,
-                pressed && styles.secondaryButtonPressed,
+                pressed && authStyles.secondaryButtonPressed,
               ]}
               onPress={() => router.push("/forgot-password")}
               disabled={!SUPABASE_CONFIGURED}
@@ -615,7 +538,7 @@ export default function Index() {
               </Text>
             ) : null}
 
-            <View style={styles.checkboxRow}>
+            <View style={authStyles.checkboxRow}>
               <Pressable
                 onPress={() => setKeepSignedIn((value) => !value)}
                 accessibilityRole="checkbox"
@@ -623,31 +546,31 @@ export default function Index() {
               >
                 <View
                   style={[
-                    styles.checkbox,
-                    keepSignedIn && styles.checkboxChecked,
+                    authStyles.checkbox,
+                    keepSignedIn && authStyles.checkboxChecked,
                   ]}
                 >
                   {keepSignedIn ? (
-                    <Text style={styles.checkboxMark}>{"\u2713"}</Text>
+                    <Text style={authStyles.checkboxMark}>{"✓"}</Text>
                   ) : null}
                 </View>
               </Pressable>
-              <Text style={[styles.checkboxLabel, { color: theme.text }]}>
-                Remember me
+              <Text style={[authStyles.checkboxLabel, { color: theme.text }]}>
+                Keep me signed in
               </Text>
             </View>
 
             <Pressable
               style={({ pressed }) => [
-                styles.primaryButton,
+                authStyles.primaryButton,
                 (loading || !formValid || !SUPABASE_CONFIGURED) &&
-                  styles.primaryButtonDisabled,
-                pressed && styles.primaryButtonPressed,
+                  authStyles.primaryButtonDisabled,
+                pressed && authStyles.primaryButtonPressed,
               ]}
               onPress={handleLogin}
               disabled={loading || !formValid || !SUPABASE_CONFIGURED}
             >
-              <Text style={styles.primaryButtonText}>
+              <Text style={authStyles.primaryButtonText}>
                 {loading ? "Signing in..." : "Sign In"}
               </Text>
             </Pressable>
@@ -658,7 +581,7 @@ export default function Index() {
               Don&apos;t have an account yet?{" "}
             </Text>
             <Pressable onPress={() => router.push("/sign-up")}>
-              <Text style={styles.signUpLink}>Sign Up</Text>
+              <Text style={authStyles.linkText}>Sign Up</Text>
             </Pressable>
           </View>
         </View>
@@ -668,125 +591,14 @@ export default function Index() {
 }
 
 const styles = StyleSheet.create({
-  keyboardView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 32,
-  },
-  container: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 24,
-    position: "relative",
-  },
-  heroWrap: {
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 6,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 14,
-    textAlign: "center",
-  },
-  formCard: {
-    borderRadius: 20,
-    padding: 18,
-    shadowColor: "#000",
-    shadowOpacity: 0.16,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
-    backdropFilter: "blur(12px)",
-  },
-  input: {
-    height: 44,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  passwordRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  primaryButton: {
-    marginTop: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    backgroundColor: "#2563eb",
-  },
-  primaryButtonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
-  },
-  primaryButtonDisabled: {
-    opacity: 0.6,
-  },
-  primaryButtonText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
   error: {
-    color: "#c00",
     marginBottom: 8,
     textAlign: "center",
-  },
-  fieldError: {
-    color: "#c00",
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#94a3b8",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#ffffff",
-    marginRight: 8,
-  },
-  checkboxChecked: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
-  },
-  checkboxMark: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  checkboxLabel: {
-    fontSize: 14,
   },
   forgotPasswordButton: {
     alignSelf: "flex-end",
     marginTop: 10,
     marginBottom: 4,
-  },
-  secondaryButtonPressed: {
-    opacity: 0.7,
   },
   forgotPasswordButtonText: {
     color: "#2563eb",
@@ -802,28 +614,6 @@ const styles = StyleSheet.create({
   },
   signUpText: {
     fontSize: 14,
-  },
-  signUpLink: {
-    color: "#2563eb",
-    fontSize: 14,
-    fontWeight: "600",
-    textDecorationLine: "underline",
-  },
-  message: {
-    fontSize: 16,
-    textAlign: "center",
-    marginBottom: 24,
-  },
-  banner: {
-    backgroundColor: "#fff3cd",
-    borderColor: "#ffeeba",
-    borderWidth: 1,
-    padding: 10,
-    borderRadius: 6,
-    marginBottom: 12,
-  },
-  bannerText: {
-    fontSize: 12,
   },
   verificationBanner: {
     borderRadius: 12,
@@ -848,23 +638,5 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontSize: 12,
     marginTop: 6,
-  },
-  secondaryActionButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#2563eb",
-    marginBottom: 12,
-  },
-  secondaryActionButtonDisabled: {
-    opacity: 0.6,
-  },
-  secondaryActionButtonText: {
-    color: "#2563eb",
-    fontSize: 14,
-    fontWeight: "600",
   },
 });

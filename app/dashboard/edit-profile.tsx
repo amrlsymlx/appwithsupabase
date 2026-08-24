@@ -1,4 +1,4 @@
-﻿import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { decode as decodeBase64 } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
@@ -18,12 +18,14 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useDashboardProfile } from "../../components/dashboard/ProfileContext";
 import {
   AVATAR_LIBRARY_OPTIONS,
   getAvatarOptionByKey,
   getAvatarSource,
   normalizeAvatarLibraryKey,
 } from "../../lib/avatarLibrary";
+import { loadProfile } from "../../lib/profile";
 import { getAuthSession, updateAuthSession } from "../../lib/storage";
 import { SUPABASE_CONFIGURED, supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme";
@@ -54,6 +56,7 @@ const promptOpenSettings = (permissionName: "Camera" | "Photo Library") => {
 export default function EditProfileScreen() {
   const router = useRouter();
   const { theme } = useTheme();
+  const { refresh: refreshDashboardProfile } = useDashboardProfile();
   const [ready, setReady] = useState(false);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -194,6 +197,7 @@ export default function EditProfileScreen() {
       Alert.alert("Avatar update failed", error?.message || "Try again.");
     } finally {
       setUpdatingAvatar(false);
+      void refreshDashboardProfile();
     }
   };
 
@@ -226,6 +230,7 @@ export default function EditProfileScreen() {
       setPendingLibraryKey(null);
       setShowAvatarLibraryPicker(false);
       setShowAvatarMenu(false);
+      void refreshDashboardProfile();
     }
   };
 
@@ -263,6 +268,7 @@ export default function EditProfileScreen() {
       setDraftFullName(trimmedName);
       setInitialFullName(trimmedName);
       setIsEditingFullName(false);
+      void refreshDashboardProfile();
       Alert.alert("Saved", "Full Name updated.");
     } catch (error: any) {
       Alert.alert("Update failed", error?.message || "Try again.");
@@ -507,94 +513,26 @@ export default function EditProfileScreen() {
 
   useEffect(() => {
     const checkSession = async () => {
-      const session = await getAuthSession();
-      if (!session?.authenticated) {
+      const profile = await loadProfile();
+      if (!profile) {
         router.replace("/");
         return;
       }
 
-      let nextName = session.name || "";
-      const nextEmail = session.email || "-";
-      let nextPhone = session.phoneNumber || "";
-      let nextAddress = session.address || "";
-      let nextUsername = session.username || "N/A";
-      let nextRole = session.role || "user";
-      let nextAvatarPath = session.avatarPath || null;
-      let nextAvatarLibraryKey =
-        normalizeAvatarLibraryKey(session.avatarLibraryKey) || null;
-
-      setEmail(nextEmail);
-
-      // Fetch fresh metadata from Supabase to sync profile and avatar across devices.
-      let freshAvatarUri = session.avatarUri || null;
-      if (SUPABASE_CONFIGURED && supabase) {
-        const { data: userData } = await supabase.auth.getUser();
-        const meta = userData?.user?.user_metadata || {};
-        const metaName = meta.name || meta.full_name;
-        const metaPhone = meta.phoneNumber || meta.phone_number;
-        if (typeof metaName === "string") {
-          nextName = metaName;
-        }
-        if (typeof metaPhone === "string") {
-          nextPhone = metaPhone;
-        }
-        if (typeof meta.address === "string") {
-          nextAddress = meta.address;
-        }
-        if (typeof meta.username === "string") {
-          nextUsername = meta.username;
-        }
-        if (typeof meta.role === "string") {
-          nextRole = meta.role;
-        }
-
-        const avatarPath = meta.avatarPath || nextAvatarPath || null;
-        const avatarLibKey = normalizeAvatarLibraryKey(meta.avatarLibraryKey);
-        if (avatarLibKey) {
-          nextAvatarLibraryKey = avatarLibKey;
-          nextAvatarPath = null;
-          freshAvatarUri = null;
-        } else if (avatarPath) {
-          const { data: signedUrlData } = await supabase.storage
-            .from("avatars")
-            .createSignedUrl(avatarPath, 3600);
-          freshAvatarUri = signedUrlData?.signedUrl || null;
-          nextAvatarLibraryKey = null;
-          nextAvatarPath = avatarPath;
-        } else {
-          nextAvatarLibraryKey = null;
-          nextAvatarPath = null;
-          freshAvatarUri = null;
-        }
-
-        await updateAuthSession({
-          name: nextName || null,
-          phoneNumber: nextPhone || null,
-          address: nextAddress || null,
-          username: nextUsername || null,
-          role: nextRole || null,
-          avatarUri: freshAvatarUri,
-          avatarPath: nextAvatarPath,
-          avatarLibraryKey: nextAvatarLibraryKey,
-        });
-      }
-
-      const displayPhone = nextPhone.trim() ? nextPhone : "N/A";
-      const displayAddress = nextAddress.trim() ? nextAddress : "N/A";
-
-      setFullName(nextName);
-      setDraftFullName(nextName);
-      setInitialFullName(nextName);
-      setPhoneNumber(displayPhone);
-      setDraftPhoneNumber(displayPhone);
-      setInitialPhoneNumber(displayPhone);
-      setAddress(displayAddress);
-      setDraftAddress(displayAddress);
-      setInitialAddress(displayAddress);
-      setUsername(nextUsername || "N/A");
-      setRole(nextRole || "user");
-      setAvatarLibraryKey(nextAvatarLibraryKey);
-      setAvatarUri(freshAvatarUri);
+      setEmail(profile.email || "-");
+      setFullName(profile.name);
+      setDraftFullName(profile.name);
+      setInitialFullName(profile.name);
+      setPhoneNumber(profile.phoneNumber);
+      setDraftPhoneNumber(profile.phoneNumber);
+      setInitialPhoneNumber(profile.phoneNumber);
+      setAddress(profile.address);
+      setDraftAddress(profile.address);
+      setInitialAddress(profile.address);
+      setUsername(profile.username);
+      setRole(profile.role);
+      setAvatarLibraryKey(profile.avatarLibraryKey);
+      setAvatarUri(profile.avatarUri);
 
       setReady(true);
     };

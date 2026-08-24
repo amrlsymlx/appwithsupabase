@@ -17,16 +17,64 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    ```bash
    EXPO_PUBLIC_SUPABASE_URL=your-supabase-url
    EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-   EXPO_PUBLIC_RECAPTCHA_SITE_KEY=your-google-recaptcha-site-key
-   EXPO_PUBLIC_RECAPTCHA_BASE_URL=https://your-domain.com
-   EXPO_PUBLIC_RECOVERY_LINK_BLOCK_HOURS=24
+   EXPO_PUBLIC_APP_BASE_URL=https://your-domain.com
+   EXPO_PUBLIC_RECAPTCHA_SITE_KEY=your-google-recaptcha-v2-site-key
+
+   # Optional overrides — all default to values derived from APP_BASE_URL
+   # EXPO_PUBLIC_RECAPTCHA_BASE_URL=https://your-domain.com
+   # EXPO_PUBLIC_SIGNUP_REDIRECT_URL=https://your-domain.com/
+   # EXPO_PUBLIC_RESET_REDIRECT_URL=https://your-domain.com/reset-password
    ```
+
+   `EXPO_PUBLIC_*` values are inlined at build time, so restart with
+   `npx expo start --clear` after changing any of them.
 
 3. Start the app
 
    ```bash
    npx expo start
    ```
+
+## Bot protection (Google reCAPTCHA v2)
+
+Sign-up and "forgot password" show a reCAPTCHA v2 "I'm not a robot" checkbox,
+implemented once in [components/Captcha.tsx](components/Captcha.tsx) —
+`react-google-recaptcha` on web, and Google's `api.js` inside a WebView on
+native.
+
+### Setup
+
+1. Register a **reCAPTCHA v2 ("I'm not a robot" checkbox)** site at
+   [google.com/recaptcha/admin](https://www.google.com/recaptcha/admin).
+2. Add every hostname the app runs on to the site's domain list: your deployed
+   domain, `localhost` for local web development, and the host in
+   `EXPO_PUBLIC_RECAPTCHA_BASE_URL` (native runs the challenge in a WebView and
+   reCAPTCHA validates the page origin).
+3. Put the **site key** in `EXPO_PUBLIC_RECAPTCHA_SITE_KEY`.
+
+There is no secret key to configure — see below for why.
+
+### This is a client-side gate only
+
+> **The challenge is not verified by any server.** It gates the submit button,
+> which stops casual abuse through the UI, but a script calling Supabase
+> directly with the anon key bypasses it entirely.
+
+The token is deliberately **not** passed to Supabase as `options.captchaToken`:
+Supabase Auth verifies only hCaptcha and Cloudflare Turnstile, so sending it
+would make every sign-up and reset request fail the moment captcha protection
+is turned on in the dashboard.
+
+If you need the challenge actually enforced, either:
+
+- **switch provider** to Turnstile or hCaptcha, pass the token as
+  `options.captchaToken`, and enable it under **Authentication → Settings → Bot
+  and Abuse Protection** with the matching secret key; or
+- **move the operations behind Edge Functions** that verify the reCAPTCHA token
+  against Google's `siteverify` endpoint and then perform the sign-up / reset
+  with the service-role key, with public sign-ups disabled in Supabase. A
+  function that only pre-checks the token is not enough — the public endpoints
+  stay callable.
 
 ## Deploy to Firebase Hosting
 
@@ -90,6 +138,12 @@ Create and deploy that function to send your custom "password changed successful
   "email": "user@example.com"
 }
 ```
+
+## Staying signed in
+
+"Keep me signed in" controls where the Supabase refresh token is stored:
+persistently (SecureStore on native, `localStorage` on web) when checked, and
+in memory only when unchecked. Passwords are never stored on the device.
 
 In the output, you'll find options to open the app in a
 

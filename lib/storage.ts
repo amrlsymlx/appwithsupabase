@@ -1,10 +1,8 @@
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
-import { supabase, SUPABASE_CONFIGURED } from "./supabase";
 
 const memoryStore = new Map<string, string>();
 const AUTH_SESSION_KEY = "auth_session";
-const REMEMBERED_CREDENTIALS_KEY = "remembered_credentials";
 
 function getPersistentStorage() {
   if (typeof window !== "undefined" && window.localStorage) {
@@ -119,78 +117,43 @@ export async function setAuthSession(
   );
 }
 
-export async function updateAuthSession(
-  updates: Partial<{
-    name: string | null;
-    phoneNumber: string | null;
-    address: string | null;
-    username: string | null;
-    role: string | null;
-    avatarUri: string | null;
-    avatarPath: string | null;
-    avatarLibraryKey: string | null;
-  }>,
-) {
-  let session = await getAuthSession();
+type AuthSessionUpdates = Partial<{
+  name: string | null;
+  phoneNumber: string | null;
+  address: string | null;
+  username: string | null;
+  role: string | null;
+  avatarUri: string | null;
+  avatarPath: string | null;
+  avatarLibraryKey: string | null;
+}>;
 
-  if (
-    (!session?.authenticated || !session?.email) &&
-    SUPABASE_CONFIGURED &&
-    supabase
-  ) {
-    const { data: userData } = await supabase.auth.getUser();
-    const user = userData?.user;
-
-    if (user?.email) {
-      const meta = user.user_metadata || {};
-      await setAuthSession(
-        {
-          email: user.email,
-          name:
-            typeof meta.name === "string"
-              ? meta.name
-              : typeof meta.full_name === "string"
-                ? meta.full_name
-                : null,
-          phoneNumber:
-            typeof meta.phoneNumber === "string"
-              ? meta.phoneNumber
-              : typeof meta.phone_number === "string"
-                ? meta.phone_number
-                : null,
-          address: typeof meta.address === "string" ? meta.address : null,
-          username: typeof meta.username === "string" ? meta.username : null,
-          role: typeof meta.role === "string" ? meta.role : null,
-          avatarPath:
-            typeof meta.avatarPath === "string" ? meta.avatarPath : null,
-          avatarLibraryKey:
-            typeof meta.avatarLibraryKey === "string"
-              ? meta.avatarLibraryKey
-              : null,
-          avatarUri: null,
-        },
-        false,
-      );
-      session = await getAuthSession();
-    }
-  }
+export async function updateAuthSession(updates: AuthSessionUpdates) {
+  const session = await getAuthSession();
 
   if (!session?.authenticated || !session?.email) {
     return;
   }
 
+  // An explicitly passed null means "clear this", which is how switching from
+  // an uploaded avatar to a library one drops the old signed URL. Only an
+  // absent key falls back to the stored value.
+  const resolve = (key: keyof AuthSessionUpdates) =>
+    (Object.prototype.hasOwnProperty.call(updates, key)
+      ? updates[key]
+      : session[key]) ?? null;
+
   await setAuthSession(
     {
       email: session.email,
-      name: updates.name ?? session.name ?? null,
-      phoneNumber: updates.phoneNumber ?? session.phoneNumber ?? null,
-      address: updates.address ?? session.address ?? null,
-      username: updates.username ?? session.username ?? null,
-      role: updates.role ?? session.role ?? null,
-      avatarUri: updates.avatarUri ?? session.avatarUri ?? null,
-      avatarPath: updates.avatarPath ?? session.avatarPath ?? null,
-      avatarLibraryKey:
-        updates.avatarLibraryKey ?? session.avatarLibraryKey ?? null,
+      name: resolve("name"),
+      phoneNumber: resolve("phoneNumber"),
+      address: resolve("address"),
+      username: resolve("username"),
+      role: resolve("role"),
+      avatarUri: resolve("avatarUri"),
+      avatarPath: resolve("avatarPath"),
+      avatarLibraryKey: resolve("avatarLibraryKey"),
     },
     Boolean(session.rememberMe),
   );
@@ -214,52 +177,11 @@ export async function clearAuthSession() {
   await deleteItem(AUTH_SESSION_KEY);
 }
 
-export async function setRememberedCredentials(credentials: {
-  email: string;
-  password: string;
-}) {
-  await setItem(
-    REMEMBERED_CREDENTIALS_KEY,
-    JSON.stringify({
-      email: credentials.email,
-      password: credentials.password,
-    }),
-    true,
-  );
-}
-
-export async function getRememberedCredentials(): Promise<{
-  email: string;
-  password: string;
-} | null> {
-  const stored = await getItem(REMEMBERED_CREDENTIALS_KEY);
-
-  if (!stored) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as {
-      email?: string;
-      password?: string;
-    };
-
-    if (
-      typeof parsed.email === "string" &&
-      typeof parsed.password === "string"
-    ) {
-      return {
-        email: parsed.email,
-        password: parsed.password,
-      };
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
-export async function clearRememberedCredentials() {
-  await deleteItem(REMEMBERED_CREDENTIALS_KEY);
+/**
+ * Removes credentials persisted by earlier builds, which stored the user's
+ * raw password under this key. Safe to drop once no installs predate the
+ * Supabase-session-based "Keep me signed in".
+ */
+export async function purgeLegacyRememberedCredentials() {
+  await deleteItem("remembered_credentials");
 }

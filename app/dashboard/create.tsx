@@ -1,29 +1,14 @@
-﻿import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { getAuthSession } from "../../lib/storage";
+import { useDashboardProfile } from "../../components/dashboard/ProfileContext";
 import { useTheme } from "../../lib/theme";
 
 export default function CreateTab() {
-  const router = useRouter();
   const { theme } = useTheme();
-  const [ready, setReady] = useState(false);
+  const { profile } = useDashboardProfile();
 
-  useEffect(() => {
-    const checkSession = async () => {
-      const session = await getAuthSession();
-      if (!session?.authenticated) {
-        router.replace("/");
-        return;
-      }
-
-      setReady(true);
-    };
-
-    checkSession();
-  }, [router]);
-
-  if (!ready) {
+  // The layout redirects to sign-in when there is no session.
+  if (!profile) {
     return null;
   }
 

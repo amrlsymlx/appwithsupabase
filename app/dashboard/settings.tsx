@@ -1,33 +1,23 @@
-﻿import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { clearAuthSession, getAuthSession } from "../../lib/storage";
+import { useDashboardProfile } from "../../components/dashboard/ProfileContext";
+import { clearAuthSession } from "../../lib/storage";
+import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme";
 
 export default function SettingsTab() {
   const router = useRouter();
   const { theme } = useTheme();
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    const checkSession = async () => {
-      const session = await getAuthSession();
-      if (!session?.authenticated) {
-        router.replace("/");
-        return;
-      }
-
-      setReady(true);
-    };
-
-    checkSession();
-  }, [router]);
+  const { profile } = useDashboardProfile();
 
   const handleSignOut = async () => {
     try {
+      // Ends the Supabase session too, not just the local one.
+      await supabase?.auth.signOut();
       await clearAuthSession();
     } catch (error) {
-      console.warn("Failed to clear auth session", error);
+      console.warn("Failed to sign out cleanly", error);
     } finally {
       router.replace("/");
     }
@@ -37,16 +27,14 @@ export default function SettingsTab() {
     router.push("/dashboard/edit-profile");
   };
 
-  if (!ready) {
+  // The layout redirects to sign-in when there is no session.
+  if (!profile) {
     return null;
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
-      {/* <Text style={[styles.message, { color: theme.secondaryText }]}>
-        Settings tab is ready.
-      </Text> */}
 
       <View style={styles.actionsRow}>
         <Pressable
@@ -85,15 +73,11 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 60,
     position: "relative",
-    backgroundColor: "#5d9fe2",
   },
   title: {
     fontSize: 28,
     fontWeight: "700",
     marginBottom: 10,
-  },
-  message: {
-    fontSize: 16,
   },
   actionsRow: {
     marginTop: 24,
