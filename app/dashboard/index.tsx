@@ -2,21 +2,30 @@ import React, { useMemo } from "react";
 import {
   Animated,
   Image,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  AVATAR_IMAGE_SIZE,
+  AVATAR_SIZE,
+} from "../../components/dashboard/avatarGeometry";
 import { useDashboardDrawer } from "../../components/dashboard/DrawerContext";
 import { useDashboardProfile } from "../../components/dashboard/ProfileContext";
 import { getAvatarSource } from "../../lib/avatarLibrary";
 import { useTheme } from "../../lib/theme";
 
+// Animating the Pressable directly, rather than wrapping it in an
+// Animated.View, matters on web: react-native-web drops click events through
+// an Animated.View wrapper, so a wrapped avatar stopped responding to taps.
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 export default function DashboardHomeTab() {
   const insets = useSafeAreaInsets();
-  const { progress: drawerProgress, openDrawer } = useDashboardDrawer();
+  const { progress: drawerProgress, isDrawerOpen, openDrawer } =
+    useDashboardDrawer();
   const { profile } = useDashboardProfile();
   const { theme } = useTheme();
 
@@ -39,41 +48,31 @@ export default function DashboardHomeTab() {
     return null;
   }
 
-  const avatarButton = (
-    <Pressable
-      onPress={openDrawer}
-      style={[
-        styles.avatarTrigger,
-        {
-          borderColor: theme.border,
-          backgroundColor: theme.surface,
-          top: 16 + insets.top,
-        },
-      ]}
-      hitSlop={8}
-    >
-      <View style={[styles.avatarWrap, { backgroundColor: theme.surface }]}>
-        <Image
-          source={
-            profile.avatarUri ? { uri: profile.avatarUri } : libraryAvatarSource
-          }
-          style={styles.avatarImage}
-        />
-      </View>
-    </Pressable>
-  );
-
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* On web skip the opacity animation — an invisible Animated.View
-          swallows pointer events there. */}
-      {Platform.OS === "web" ? (
-        avatarButton
-      ) : (
-        <Animated.View style={{ opacity: avatarOpacity }}>
-          {avatarButton}
-        </Animated.View>
-      )}
+      <AnimatedPressable
+        onPress={openDrawer}
+        disabled={isDrawerOpen}
+        style={[
+          styles.avatarTrigger,
+          {
+            borderColor: theme.border,
+            backgroundColor: theme.surface,
+            top: 16 + insets.top,
+            opacity: avatarOpacity,
+          },
+        ]}
+        hitSlop={8}
+      >
+        <View style={[styles.avatarWrap, { backgroundColor: theme.surface }]}>
+          <Image
+            source={
+              profile.avatarUri ? { uri: profile.avatarUri } : libraryAvatarSource
+            }
+            style={styles.avatarImage}
+          />
+        </View>
+      </AnimatedPressable>
 
       <View style={styles.contentArea}>
         <Text style={[styles.title, { color: theme.text }]}>
@@ -111,16 +110,16 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   avatarWrap: {
-    width: 46,
-    height: 46,
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
     borderRadius: 999,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
   avatarImage: {
-    width: 33,
-    height: 33,
+    width: AVATAR_IMAGE_SIZE,
+    height: AVATAR_IMAGE_SIZE,
     resizeMode: "contain",
   },
   contentArea: {

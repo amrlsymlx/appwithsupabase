@@ -1,5 +1,10 @@
 import { normalizeAvatarLibraryKey } from "./avatarLibrary";
-import { getAuthSession, setAuthSession, updateAuthSession } from "./storage";
+import {
+  clearAuthSession,
+  getAuthSession,
+  setAuthSession,
+  updateAuthSession,
+} from "./storage";
 import { SUPABASE_CONFIGURED, supabase } from "./supabase";
 
 export type Profile = {
@@ -72,9 +77,11 @@ export const persistProfile = async (profile: Profile, keepSignedIn: boolean) =>
   setAuthSession(profile, keepSignedIn);
 
 /**
- * Returns the signed-in user's profile, refreshed from Supabase when
- * available, or null when there is no local session. Also re-signs the avatar
- * URL, which expires after an hour.
+ * Returns the signed-in user's profile, always re-validated against a live
+ * Supabase session. Returns null (never a stale cached profile) when there is
+ * no current session, so a returning user can never reach the dashboard
+ * without actually being authenticated. Also re-signs the avatar URL, which
+ * expires after an hour.
  */
 export const loadProfile = async (): Promise<Profile | null> => {
   const session = await getAuthSession();
@@ -82,24 +89,17 @@ export const loadProfile = async (): Promise<Profile | null> => {
     return null;
   }
 
-  if (SUPABASE_CONFIGURED && supabase) {
-    const { data } = await supabase.auth.getUser();
-    if (data?.user) {
-      const profile = await buildProfileFromUser(data.user);
-      await updateAuthSession(profile);
-      return profile;
-    }
+  if (!SUPABASE_CONFIGURED || !supabase) {
+    return null;
   }
 
-  return {
-    email: session.email,
-    name: session.name ?? "",
-    phoneNumber: session.phoneNumber ?? "N/A",
-    address: session.address ?? "N/A",
-    username: session.username ?? "N/A",
-    role: session.role ?? "user",
-    avatarUri: session.avatarUri ?? null,
-    avatarPath: session.avatarPath ?? null,
-    avatarLibraryKey: normalizeAvatarLibraryKey(session.avatarLibraryKey),
-  };
+  const { data } = await supabase.auth.getUser();
+  if (!data?.user) {
+    await clearAuthSession();
+    return null;
+  }
+
+  const profile = await buildProfileFromUser(data.user);
+  await updateAuthSession(profile);
+  return profile;
 };

@@ -17,6 +17,7 @@ export type AppTheme = {
   name: ThemeName;
   background: string;
   surface: string;
+  drawerBackground: string;
   text: string;
   secondaryText: string;
   border: string;
@@ -35,6 +36,7 @@ const themes: Record<ThemeName, AppTheme> = {
     name: "light",
     background: "#f5f7fb",
     surface: "#ffffff",
+    drawerBackground: "#e7ebf2",
     text: "#111827",
     secondaryText: "#4b5563",
     border: "#d1d5db",
@@ -51,6 +53,7 @@ const themes: Record<ThemeName, AppTheme> = {
     name: "dark",
     background: "#111827",
     surface: "#1f2937",
+    drawerBackground: "#0a0f1a",
     text: "#f9fafb",
     secondaryText: "#d1d5db",
     border: "#4b5563",

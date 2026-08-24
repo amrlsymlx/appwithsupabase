@@ -25,6 +25,7 @@
     },
 
     "web": {
+      "name": "Syamil Test",
       "output": "static",
       "favicon": "./assets/AppIcons/appstore.png",
       "index": {

@@ -177,11 +177,46 @@ export async function clearAuthSession() {
   await deleteItem(AUTH_SESSION_KEY);
 }
 
+const REMEMBERED_CREDENTIALS_KEY = "remembered_credentials";
+
 /**
- * Removes credentials persisted by earlier builds, which stored the user's
- * raw password under this key. Safe to drop once no installs predate the
- * Supabase-session-based "Keep me signed in".
+ * Persists the raw email/password for the "Remember me" checkbox so the
+ * login form can be pre-filled next time. Stored via SecureStore (Keychain /
+ * Keystore) on native and localStorage on web, matching every other
+ * persistent value in this file — never as plaintext app-local state.
  */
-export async function purgeLegacyRememberedCredentials() {
-  await deleteItem("remembered_credentials");
+export async function setRememberedCredentials(credentials: {
+  email: string;
+  password: string;
+}) {
+  await setItem(
+    REMEMBERED_CREDENTIALS_KEY,
+    JSON.stringify({ email: credentials.email, password: credentials.password }),
+    true,
+  );
+}
+
+export async function getRememberedCredentials(): Promise<{
+  email: string;
+  password: string;
+} | null> {
+  const stored = await getItem(REMEMBERED_CREDENTIALS_KEY);
+
+  if (!stored) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(stored);
+    if (typeof parsed?.email === "string" && typeof parsed?.password === "string") {
+      return { email: parsed.email, password: parsed.password };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearRememberedCredentials() {
+  await deleteItem(REMEMBERED_CREDENTIALS_KEY);
 }

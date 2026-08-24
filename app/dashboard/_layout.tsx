@@ -13,6 +13,12 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  AVATAR_IMAGE_SIZE,
+  AVATAR_LEFT,
+  AVATAR_SIZE,
+  AVATAR_TOP_OFFSET,
+} from "../../components/dashboard/avatarGeometry";
 import { DashboardDrawerContext } from "../../components/dashboard/DrawerContext";
 import { DashboardProfileContext } from "../../components/dashboard/ProfileContext";
 import { getAvatarSource } from "../../lib/avatarLibrary";
@@ -21,8 +27,13 @@ import { clearAuthSession } from "../../lib/storage";
 import { supabase } from "../../lib/supabase";
 import { ThemeToggle, useTheme } from "../../lib/theme";
 
-const PREVIEW_PORTION = 0.1;
+const DRAWER_PORTION = 0.7;
 const DRAWER_RADIUS = 30;
+// drawerSurface's own paddingTop beyond the safe-area inset (see its inline
+// style below) — factored out so the content gap math stays correct if that
+// padding ever changes.
+const DRAWER_HEADER_TOP_PADDING = 10;
+const CONTENT_GAP_BELOW_AVATAR = 20;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -31,7 +42,7 @@ export default function DashboardTabsLayout() {
   const { theme } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -40,10 +51,16 @@ export default function DashboardTabsLayout() {
   const currentProgress = useRef(0);
   const gestureStartProgress = useRef(0);
 
-  const previewWidth = Math.max(1, width * PREVIEW_PORTION);
-  const openTranslateX = Math.max(1, width - previewWidth);
-  const drawerContentTop = Math.max(56, insets.top + 48);
-  const drawerContentLift = Math.round(height * 0.25);
+  // The drawer occupies a fixed portion of the viewport at any size, and the
+  // page slides right by exactly that much.
+  const openTranslateX = Math.max(1, width * DRAWER_PORTION);
+  // Sits directly below the avatar (see avatarGeometry.ts), independent of
+  // the header row above it, which is positioned absolutely.
+  const drawerContentTop =
+    AVATAR_TOP_OFFSET -
+    DRAWER_HEADER_TOP_PADDING +
+    AVATAR_SIZE +
+    CONTENT_GAP_BELOW_AVATAR;
 
   const libraryAvatarSource = useMemo(
     () => getAvatarSource(profile?.avatarLibraryKey, profile?.email),
@@ -154,11 +171,12 @@ export default function DashboardTabsLayout() {
   const drawerContextValue = useMemo(
     () => ({
       progress,
+      isDrawerOpen,
       openDrawer,
       closeDrawer,
       toggleDrawer,
     }),
-    [progress],
+    [progress, isDrawerOpen],
   );
 
   const profileContextValue = useMemo(
@@ -169,10 +187,10 @@ export default function DashboardTabsLayout() {
   return (
     <DashboardProfileContext.Provider value={profileContextValue}>
     <DashboardDrawerContext.Provider value={drawerContextValue}>
-      <View style={[styles.root, { backgroundColor: theme.surface }]}>
+      <View style={[styles.root, { backgroundColor: theme.drawerBackground }]}>
         <View
           pointerEvents={isDrawerOpen ? "auto" : "none"}
-          style={[styles.drawerLayer, { backgroundColor: theme.surface }]}
+          style={[styles.drawerLayer, { backgroundColor: theme.drawerBackground }]}
         >
           {/* Transparent swipe strip; box-only on native so buttons stay tappable */}
           {panResponder ? (
@@ -188,7 +206,12 @@ export default function DashboardTabsLayout() {
               { width: openTranslateX, paddingTop: insets.top + 10 },
             ]}
           >
-            <View style={styles.drawerHeader}>
+            <View
+              style={[
+                styles.drawerHeaderActions,
+                { top: insets.top + DRAWER_HEADER_TOP_PADDING },
+              ]}
+            >
               <ThemeToggle inline />
               <Pressable
                 onPress={closeDrawer}
@@ -207,88 +230,93 @@ export default function DashboardTabsLayout() {
               </Pressable>
             </View>
 
-            <View style={{ transform: [{ translateY: -drawerContentLift }] }}>
-              <View
-                style={[styles.drawerProfile, { marginTop: drawerContentTop }]}
+            {/* Positioned to exactly match the home screen's avatar (see
+                avatarGeometry.ts), so opening the drawer reads as that avatar
+                being revealed in place rather than a new one appearing. */}
+            <View
+              style={[
+                styles.drawerAvatarWrap,
+                {
+                  top: insets.top + AVATAR_TOP_OFFSET,
+                  backgroundColor: theme.drawerBackground,
+                },
+              ]}
+            >
+              <Image
+                source={
+                  profile?.avatarUri
+                    ? { uri: profile.avatarUri }
+                    : libraryAvatarSource
+                }
+                style={styles.avatarImage}
+              />
+            </View>
+
+            <View
+              style={[styles.drawerProfile, { marginTop: drawerContentTop }]}
+            >
+              <Text
+                style={[styles.drawerName, { color: theme.text }]}
+                numberOfLines={1}
               >
-                <View
-                  style={[
-                    styles.drawerAvatarWrap,
-                    { backgroundColor: theme.surface },
-                  ]}
-                >
-                  <Image
-                    source={
-                      profile?.avatarUri
-                        ? { uri: profile.avatarUri }
-                        : libraryAvatarSource
-                    }
-                    style={styles.avatarImage}
-                  />
-                </View>
-                <Text
-                  style={[styles.drawerName, { color: theme.text }]}
-                  numberOfLines={1}
-                >
-                  {profile?.name || "Welcome"}
-                </Text>
-                <Text
-                  style={[styles.drawerEmail, { color: theme.secondaryText }]}
-                  numberOfLines={1}
-                >
-                  {profile?.email || ""}
-                </Text>
-              </View>
+                {profile?.name || "Welcome"}
+              </Text>
+              <Text
+                style={[styles.drawerEmail, { color: theme.secondaryText }]}
+                numberOfLines={1}
+              >
+                {profile?.email || ""}
+              </Text>
+            </View>
 
-              <View style={styles.drawerMenu}>
-                <Pressable
-                  onPress={() => {
-                    closeDrawer();
-                    router.replace("/dashboard");
-                  }}
-                  style={({ pressed }) => [
-                    styles.drawerItem,
-                    {
-                      backgroundColor: theme.background,
-                      borderColor: theme.border,
-                    },
-                    pressed && styles.drawerItemPressed,
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name="home-outline"
-                    size={20}
-                    color={theme.accent}
-                  />
-                  <Text style={[styles.drawerItemLabel, { color: theme.text }]}>
-                    Home
-                  </Text>
-                </Pressable>
+            <View style={styles.drawerMenu}>
+              <Pressable
+                onPress={() => {
+                  closeDrawer();
+                  router.replace("/dashboard");
+                }}
+                style={({ pressed }) => [
+                  styles.drawerItem,
+                  {
+                    backgroundColor: theme.background,
+                    borderColor: theme.border,
+                  },
+                  pressed && styles.drawerItemPressed,
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="home-outline"
+                  size={20}
+                  color={theme.accent}
+                />
+                <Text style={[styles.drawerItemLabel, { color: theme.text }]}>
+                  Home
+                </Text>
+              </Pressable>
 
-                <Pressable
-                  onPress={() => {
-                    closeDrawer();
-                    router.replace("/dashboard/settings");
-                  }}
-                  style={({ pressed }) => [
-                    styles.drawerItem,
-                    {
-                      backgroundColor: theme.background,
-                      borderColor: theme.border,
-                    },
-                    pressed && styles.drawerItemPressed,
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name="cog-outline"
-                    size={20}
-                    color={theme.accent}
-                  />
-                  <Text style={[styles.drawerItemLabel, { color: theme.text }]}>
-                    Settings
-                  </Text>
-                </Pressable>
-              </View>
+              <Pressable
+                onPress={() => {
+                  closeDrawer();
+                  router.replace("/dashboard/settings");
+                }}
+                style={({ pressed }) => [
+                  styles.drawerItem,
+                  {
+                    backgroundColor: theme.background,
+                    borderColor: theme.border,
+                  },
+                  pressed && styles.drawerItemPressed,
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="cog-outline"
+                  size={20}
+                  color={theme.accent}
+                />
+                <Text style={[styles.drawerItemLabel, { color: theme.text }]}>
+                  Settings
+                </Text>
+              </Pressable>
             </View>
 
             <Pressable
@@ -422,7 +450,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 14,
     paddingHorizontal: 14,
-    justifyContent: "space-between",
   },
   swipeZone: {
     position: "absolute",
@@ -432,10 +459,13 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 0,
   },
-  drawerHeader: {
+  drawerHeaderActions: {
+    position: "absolute",
+    right: 14,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 18,
+    zIndex: 5,
   },
   closeButton: {
     width: 32,
@@ -450,17 +480,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   drawerAvatarWrap: {
-    width: 40,
-    height: 40,
+    position: "absolute",
+    left: AVATAR_LEFT,
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
     borderRadius: 999,
     overflow: "hidden",
-    marginBottom: 8,
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 5,
   },
   avatarImage: {
-    width: 28,
-    height: 28,
+    width: AVATAR_IMAGE_SIZE,
+    height: AVATAR_IMAGE_SIZE,
     resizeMode: "contain",
   },
   drawerName: {
@@ -474,8 +506,7 @@ const styles = StyleSheet.create({
   },
   drawerMenu: {
     gap: 8,
-    width: "72%",
-    maxWidth: 250,
+    width: "100%",
   },
   signOutItem: {
     flexDirection: "row",
@@ -483,8 +514,8 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 10,
     paddingHorizontal: 10,
-    width: "72%",
-    maxWidth: 250,
+    width: "100%",
+    marginTop: "auto",
   },
   signOutText: {
     fontSize: 15,

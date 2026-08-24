@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 import { SIGNUP_EMAIL_REDIRECT } from "../lib/authRedirect";
-import { getAuthPersistence, setAuthPersistence } from "../lib/authStorage";
+import { setAuthPersistence } from "../lib/authStorage";
 import {
   authStyles,
   getFormCardStyle,
@@ -22,7 +22,11 @@ import {
   getPlaceholderColor,
 } from "../lib/formStyles";
 import { buildProfileFromUser, persistProfile } from "../lib/profile";
-import { purgeLegacyRememberedCredentials } from "../lib/storage";
+import {
+  clearRememberedCredentials,
+  getRememberedCredentials,
+  setRememberedCredentials,
+} from "../lib/storage";
 import { supabase, SUPABASE_CONFIGURED } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 import { validateEmail, validateSignInPassword } from "../lib/validation";
@@ -117,7 +121,7 @@ export default function Index() {
   const [emailTouched, setEmailTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [keepSignedIn, setKeepSignedIn] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
   const [resendingVerification, setResendingVerification] = useState(false);
   const [verificationBanner, setVerificationBanner] =
     useState<VerificationBannerState | null>(null);
@@ -146,9 +150,9 @@ export default function Index() {
     try {
       const normalizedEmail = email.trim();
 
-      // Decided before signing in so the refresh token is written to the
-      // right place: persistent storage, or memory only.
-      await setAuthPersistence(keepSignedIn);
+      // Auth never survives an app restart; only "Remember me" (handled
+      // below) persists anything across launches.
+      await setAuthPersistence(false);
 
       const { data, error: signInError } =
         await supabase.auth.signInWithPassword({
@@ -168,7 +172,13 @@ export default function Index() {
       }
 
       const profile = await buildProfileFromUser(user);
-      await persistProfile(profile, keepSignedIn);
+      await persistProfile(profile, false);
+
+      if (rememberMe) {
+        await setRememberedCredentials({ email: normalizedEmail, password });
+      } else {
+        await clearRememberedCredentials();
+      }
 
       setEmail("");
       setPassword("");
@@ -239,60 +249,30 @@ export default function Index() {
     });
   };
 
-  // Restores a persisted Supabase session so "Keep me signed in" goes straight
-  // to the dashboard instead of re-asking for a password.
+  // Every app launch lands on this login screen; a prior Supabase session is
+  // never used to skip straight to the dashboard. "Remember me" only
+  // pre-fills the form fields below.
   useEffect(() => {
     let cancelled = false;
 
-    const restoreSession = async () => {
-      await purgeLegacyRememberedCredentials();
-
-      const persistenceEnabled = await getAuthPersistence();
-      if (!cancelled) {
-        setKeepSignedIn(persistenceEnabled);
+    const restoreForm = async () => {
+      const remembered = await getRememberedCredentials();
+      if (!cancelled && remembered) {
+        setEmail(remembered.email);
+        setPassword(remembered.password);
+        setRememberMe(true);
       }
-
-      if (!SUPABASE_CONFIGURED || !supabase) {
-        if (!cancelled) {
-          setCheckingSession(false);
-        }
-        return;
-      }
-
-      // A verification link is handled by the effect below, which signs the
-      // user back out; do not race it into the dashboard.
-      const urlToParse = currentUrl ?? (await Linking.getInitialURL());
-      if (urlToParse && isVerificationUrl(extractEmailVerificationParams(urlToParse))) {
-        if (!cancelled) {
-          setCheckingSession(false);
-        }
-        return;
-      }
-
-      const { data } = await supabase.auth.getSession();
-      const user = data.session?.user;
-      if (!user) {
-        if (!cancelled) {
-          setCheckingSession(false);
-        }
-        return;
-      }
-
-      const profile = await buildProfileFromUser(user);
-      await persistProfile(profile, true);
 
       if (!cancelled) {
-        router.replace("/dashboard");
+        setCheckingSession(false);
       }
     };
 
-    void restoreSession();
+    void restoreForm();
 
     return () => {
       cancelled = true;
     };
-    // Runs once on mount; the verification effect owns later URL changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -540,23 +520,23 @@ export default function Index() {
 
             <View style={authStyles.checkboxRow}>
               <Pressable
-                onPress={() => setKeepSignedIn((value) => !value)}
+                onPress={() => setRememberMe((value) => !value)}
                 accessibilityRole="checkbox"
-                accessibilityState={{ checked: keepSignedIn }}
+                accessibilityState={{ checked: rememberMe }}
               >
                 <View
                   style={[
                     authStyles.checkbox,
-                    keepSignedIn && authStyles.checkboxChecked,
+                    rememberMe && authStyles.checkboxChecked,
                   ]}
                 >
-                  {keepSignedIn ? (
+                  {rememberMe ? (
                     <Text style={authStyles.checkboxMark}>{"✓"}</Text>
                   ) : null}
                 </View>
               </Pressable>
               <Text style={[authStyles.checkboxLabel, { color: theme.text }]}>
-                Keep me signed in
+                Remember me
               </Text>
             </View>
 
