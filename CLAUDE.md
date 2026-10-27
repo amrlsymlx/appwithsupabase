@@ -6,5 +6,4 @@
 - This is the SDK 54 / Firebase sibling of `../loginpage-newdeploy` (SDK 57 / Vercel), which is the more up-to-date copy of the shared auth code. When fixing shared logic, check whether the other repo needs the same fix and say so rather than silently editing it.
 - The `.agents/skills/` Firebase skills are vendored docs. Use them only if the task actually involves Firebase (hosting or analytics); don't edit them.
 - `.mcp.json` registers the `lance` MCP server (App Store Connect operator); unrelated to normal app work.
-- After edits run `npm run lint`. No tests exist, so verify UI changes with `npm run web` rather than claiming they work.
-- Never read out or echo `.env`, `google-services.json` or `GoogleService-Info.plist` contents.
+- Don't open or echo `.env`, `google-services.json` or `GoogleService-Info.plist`.

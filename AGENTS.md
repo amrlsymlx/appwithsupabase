@@ -25,7 +25,7 @@ There is no test suite.
 - `firebase.json` / `.firebaserc` – Hosting config (`public: dist`, clean URLs, trailing-slash redirects). `google-services.json` and `GoogleService-Info.plist` are the native Firebase configs.
 - `.agents/skills/` and `skills-lock.json` – vendored Firebase agent skills (Auth, Firestore, Hosting, Data Connect, etc.). Reference material only; this app does not use Firestore or Firebase Auth.
 
-## Rules
+## Code style and conventions
 
 1. **Cross-platform first.** Browser-only and native-only code goes in platform-suffixed files (`.web.ts` / `.native.ts`), following the `analytics` pattern.
 2. **Supabase is the only auth/data backend.** Firebase here means Hosting + Analytics only. Don't add Firebase Auth/Firestore usage.
@@ -33,9 +33,15 @@ There is no test suite.
 4. **"Remember me" (pre-fills the form) and "Keep me signed in" (where the refresh token lives) are separate.** Don't merge them. Passwords are never stored on-device.
 5. **reCAPTCHA is a client-side UI gate only**; the token is deliberately not sent to Supabase. Don't present it as a security boundary.
 6. **Don't use `Alert.alert` for messages that must show on web**; react-native-web's version is a no-op. (The sibling repo has `lib/notify.ts`; this one doesn't yet, so add an equivalent rather than relying on `Alert`.)
-7. **Match existing code, keep TypeScript strict, keep changes small.** Use `npx expo install <pkg>` so versions match SDK 54.
+7. **Reuse before adding.** Take styles from `lib/formStyles.ts`, colours from `useTheme()` in `lib/theme.tsx`; type props and Supabase results; avoid `any`.
+8. **Install packages with `npx expo install <pkg>`** so versions match SDK 54.
+9. **Touch only the files the request needs.** No reformatting or refactors of unrelated code.
 
-## Environment and secrets
+## Testing
+
+No test suite exists. After changes: run `npm run lint` and fix what you introduced, then check the affected flow with `npm run web`. Native-only changes need `npm run android` / `npm run ios`; if you couldn't run them, say so.
+
+## Security and environment
 
 `.env` (git-ignored; never commit or print values): `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_RECAPTCHA_SITE_KEY`, `EXPO_PUBLIC_APP_BASE_URL`, plus optional `EXPO_PUBLIC_SIGNUP_REDIRECT_URL`, `EXPO_PUBLIC_RESET_REDIRECT_URL`, `EXPO_PUBLIC_RECAPTCHA_BASE_URL`, `EXPO_PUBLIC_RECOVERY_LINK_BLOCK_HOURS`. Several commented domain blocks exist (Firebase / own domain / localhost); keep exactly one active, and keep Supabase Site URL and redirect allow-list in sync with it.
 
@@ -45,6 +51,8 @@ There is no test suite.
 - `lib/analytics.web.ts` embeds the Firebase **web** config. Those values are public client identifiers by design, but don't add any secret or service-account key to the repo.
 - Static export: do **not** enable SPA rewrites in Firebase Hosting.
 
-## Git
+## Commits and PRs
 
-- Don't commit or push unless asked. Short, imperative commit messages.
+- Don't commit or push unless asked.
+- Commit subjects are imperative and under 72 characters. Run `npm run lint` before committing.
+- Never commit `.env`, `google-services.json` changes with new keys, or any service-account file.
